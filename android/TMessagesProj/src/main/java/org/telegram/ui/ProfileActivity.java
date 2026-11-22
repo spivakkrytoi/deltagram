@@ -11293,7 +11293,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             }
         }
         if (icon != 0) {
-            botVerificationDrawable[a].set(icon, animated);
+            Drawable bundled = DeltagramVerifications.bundledIcon(getContext(), icon);
+            if (bundled != null) {
+                botVerificationDrawable[a].set(bundled, animated);
+            } else {
+                botVerificationDrawable[a].set(icon, animated);
+            }
         } else {
             botVerificationDrawable[a].set((Drawable) null, animated);
         }

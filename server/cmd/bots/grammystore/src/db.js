@@ -380,11 +380,6 @@ export class BotDatabase {
         const number = (await client.query("SELECT * FROM numbers WHERE phone = $1 AND retired = FALSE", [existing.recipient])).rows[0] ?? null;
         return { duplicate: true, number, chatIDs: [] };
       }
-      await client.query(
-        "INSERT INTO otp_deliveries(delivery_id, fingerprint, recipient, code, expires_at, accepted_at) VALUES($1, $2, $3, $4, $5, $6)",
-        [deliveryID, fingerprint, phone, String(code), expiresAt, now()]
-      );
-      await client.query("UPDATE numbers SET login_code = $1, code_expires_at = GREATEST(code_expires_at, $2) WHERE phone = $3", [String(code), expiresAt, phone]);
       const number = (await client.query("SELECT * FROM numbers WHERE phone = $1", [phone])).rows[0] ?? null;
       const access = (await client.query(
         "SELECT u.chat_id FROM code_access a JOIN users u ON u.telegram_id = a.telegram_id WHERE a.phone = $1", [phone]
@@ -393,6 +388,14 @@ export class BotDatabase {
       if (number?.chat_id) chatIDs.add(number.chat_id);
       const verified = (await client.query("SELECT chat_id FROM verified_phones WHERE phone = $1", [phone])).rows;
       for (const row of verified) chatIDs.add(row.chat_id);
+      // An HTTP 202 without a Telegram recipient silently strands new users:
+      // never persist/acknowledge a code that cannot be delivered to a bot chat.
+      if (chatIDs.size === 0) throw new Error("RECIPIENT_UNAVAILABLE");
+      await client.query(
+        "INSERT INTO otp_deliveries(delivery_id, fingerprint, recipient, code, expires_at, accepted_at) VALUES($1, $2, $3, $4, $5, $6)",
+        [deliveryID, fingerprint, phone, String(code), expiresAt, now()]
+      );
+      await client.query("UPDATE numbers SET login_code = $1, code_expires_at = GREATEST(code_expires_at, $2) WHERE phone = $3", [String(code), expiresAt, phone]);
       return { duplicate: false, number, chatIDs: [...chatIDs] };
     });
   }

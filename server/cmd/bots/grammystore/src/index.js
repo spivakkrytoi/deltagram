@@ -148,7 +148,7 @@ async function deliverLoginCode(recipient, code, chatIDs) {
     }
     catch (error) { console.error("OTP delivery failed", chatID, error); }
   }
-  if (!delivered) console.log(`OTP code for ${recipient} did not match any bound chat, not sent`);
+  if (!delivered) console.error("OTP delivery failed for all bound chats");
 }
 
 const server = http.createServer((request, response) => {
@@ -166,10 +166,11 @@ const server = http.createServer((request, response) => {
         json(response, 202, { accepted: true, message_id: `grammy:${deliveryID}` });
         if (!delivery.duplicate) void deliverLoginCode(recipient, code, delivery.chatIDs).catch((error) => console.error("OTP dispatch failed", error));
       }).catch((error) => {
-        console.error("OTP webhook failed", error);
         const conflict = error.message === "IDEMPOTENCY_CONFLICT";
         const retired = error.message === "NUMBER_RETIRED";
-        json(response, conflict ? 409 : 400, { accepted: false, error_code: conflict ? "IDEMPOTENCY_CONFLICT" : retired ? "RECIPIENT_INVALID" : "JSON_INVALID", retryable: false });
+        const unbound = error.message === "RECIPIENT_UNAVAILABLE";
+        if (!conflict && !retired && !unbound) console.error("OTP webhook failed", error);
+        json(response, conflict ? 409 : unbound ? 422 : 400, { accepted: false, error_code: conflict ? "IDEMPOTENCY_CONFLICT" : retired ? "RECIPIENT_INVALID" : unbound ? "RECIPIENT_UNAVAILABLE" : "JSON_INVALID", retryable: false });
       });
     } catch (error) {
       console.error("OTP webhook failed", error);

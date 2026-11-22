@@ -103,6 +103,18 @@ test("code access, support replies, refunds and pending wheel awards are durable
   await assert.rejects(() => db.reserveSpin(1, 100, 50));
 });
 
+test("unbound phone cannot be acknowledged as delivered", async () => {
+  if (!db) return;
+  await cleanTable("otp_deliveries"); await cleanTable("code_access");
+  await cleanTable("verified_phones"); await cleanTable("numbers"); await cleanTable("users");
+  await assert.rejects(
+    () => db.acceptLoginCodeDelivery("unbound-otp", "fingerprint", "+15550000001", "12345", 2_000_000_000),
+    /RECIPIENT_UNAVAILABLE/
+  );
+  const rows = await db.pool.query("SELECT count(*)::int AS total FROM otp_deliveries WHERE delivery_id = $1", ["unbound-otp"]);
+  assert.equal(rows.rows[0].total, 0);
+});
+
 test("wheel limits count actual spins: daily >1 and unlimited daily with a weekly cap", async () => {
   if (!db) return;
   await cleanTable("spin_awards"); await cleanTable("users");
