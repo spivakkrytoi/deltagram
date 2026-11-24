@@ -232,6 +232,7 @@ import org.telegram.ui.Stories.recorder.StoryEntry;
 import org.telegram.ui.Stories.recorder.StoryRecorder;
 import org.telegram.ui.Stories.LiveStoryPipOverlay;
 import org.telegram.ui.TON.TONIntroActivity;
+import org.telegram.ui.Plugins.DeltamentPluginManager;
 import org.telegram.ui.Wallet.GramWalletStorageAuth;
 import org.telegram.ui.Wallet.WalletActivity;
 import org.telegram.ui.Wallet.WalletSendSelectSender;
@@ -413,6 +414,18 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         ApplicationLoader.postInitApplication();
         AndroidUtilities.checkDisplaySize(this, getResources().getConfiguration());
         currentAccount = UserConfig.selectedAccount;
+        // DeltaGram: a short greeting jingle on a cold start. Skipped when the
+        // app is only opened to receive a shared file and can be turned off in
+        // the settings ("Звук при запуске").
+        final Intent launchIntent = getIntent();
+        final boolean shareLaunch = launchIntent != null
+                && (Intent.ACTION_SEND.equals(launchIntent.getAction())
+                || Intent.ACTION_SEND_MULTIPLE.equals(launchIntent.getAction()));
+        if (!shareLaunch) {
+            DeltamentStartupSound.playOnLaunch(this);
+        }
+        // DeltaGram plugins: load everything enabled from files/dg_plugins.
+        DeltamentPluginManager.getInstance().init();
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         if (!UserConfig.getInstance(currentAccount).isClientActivated()) {
             Intent intent = getIntent();

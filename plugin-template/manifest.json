@@ -1,0 +1,8 @@
+{
+  "id": "hello",
+  "name": "Hello plugin",
+  "version": "1.0",
+  "author": "@deltagram",
+  "description": "Example DeltaGram plugin: logs to logcat and stores a counter",
+  "entry": "com.deltagram.plugin.HelloPlugin"
+}

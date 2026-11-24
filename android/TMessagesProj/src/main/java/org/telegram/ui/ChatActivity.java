@@ -152,6 +152,7 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ChatThemeController;
 import org.telegram.utils.code.highlight.CodeHighlighting;
 import org.telegram.messenger.ContactsController;
+import org.telegram.messenger.DeltaGramUi;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.DocumentObject;
 import org.telegram.messenger.DownloadController;
@@ -1310,6 +1311,7 @@ public class ChatActivity extends BaseFragment implements
         }
     };
     private int chatEmojiViewPadding;
+    private int dgLastKeyboardHeight;
     private int fixedKeyboardHeight = -1;
     private Runnable cancelFixedPositionRunnable;
     private boolean invalidateMessagesVisiblePart;
@@ -1704,6 +1706,9 @@ public class ChatActivity extends BaseFragment implements
     private final static int charge_fee = 72;
 
     private final static int chat_menu_topic_create = 73;
+    private final static int copy_link = 75;
+    private final static int dg_mark_read = 76;
+    private final static int dg_chat_stats = 77;
 
     private final static int id_chat_compose_panel = 1000;
 
@@ -3808,6 +3813,16 @@ public class ChatActivity extends BaseFragment implements
                 } else if (id == open_direct) {
                     if (currentChat == null) return;
                     presentFragment(ChatActivity.of(-currentChat.linked_monoforum_id));
+                } else if (id == copy_link) {
+                    final String dgUsername = dgPublicUsername();
+                    if (!TextUtils.isEmpty(dgUsername)) {
+                        AndroidUtilities.addToClipboard("https://t.me/" + dgUsername);
+                        BulletinFactory.of(ChatActivity.this).createCopyLinkBulletin().show();
+                    }
+                } else if (id == dg_mark_read) {
+                    dgMarkAsRead();
+                } else if (id == dg_chat_stats) {
+                    presentFragment(DeltaGramChatStatsActivity.of(dialog_id));
                 } else if (id == charge_fee ) {
                     long user_id = dialog_id;
                     long parent_id = 0;
@@ -4533,6 +4548,18 @@ public class ChatActivity extends BaseFragment implements
                 feeItemText = headerItem.lazilyAddText("", 13);
                 feeItemGap.setVisibility(View.GONE);
                 feeItemText.setVisibility(View.GONE);
+            }
+            if (headerItem != null) {
+                if (DeltaGramUi.copyLinkMenu()) {
+                    final String dgUsername = dgPublicUsername();
+                    if (!TextUtils.isEmpty(dgUsername)) {
+                        headerItem.lazilyAddSubItem(copy_link, R.drawable.msg_link, "Копировать ссылку");
+                    }
+                }
+                if (DeltaGramUi.chatOverflow() && chatMode == 0 && !isTopic) {
+                    headerItem.lazilyAddSubItem(dg_mark_read, R.drawable.msg_markunread, "Отметить прочитанным");
+                }
+                headerItem.lazilyAddSubItem(dg_chat_stats, R.drawable.msg_stats, "Итоги чата");
             }
         } else if (chatMode == MODE_EDIT_BUSINESS_LINK) {
             headerItem = menu.addItem(chat_menu_options, otherIcon);
@@ -13701,6 +13728,36 @@ public class ChatActivity extends BaseFragment implements
         return chatMode == MODE_QUICK_REPLIES || chatMode == MODE_WELCOME_MESSAGES;
     }
 
+    private String dgPublicUsername() {
+        if (currentUser != null) {
+            return UserObject.getPublicUsername(currentUser);
+        }
+        if (currentChat != null) {
+            return ChatObject.getPublicUsername(currentChat);
+        }
+        return null;
+    }
+
+    private void dgMarkAsRead() {
+        final TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(dialog_id);
+        if (dialog == null) {
+            return;
+        }
+        getMessagesController().markDialogAsRead(
+                dialog_id,
+                dialog.top_message,
+                dialog.top_message,
+                dialog.last_message_date,
+                false,
+                getTopicId(),
+                0,
+                true,
+                0);
+        if (BulletinFactory.canShowBulletin(this)) {
+            BulletinFactory.of(this).createSimpleBulletin(R.raw.info, "Отмечено прочитанным").show();
+        }
+    }
+
     private void showFloatingDateView(boolean scroll) {
         if (floatingDateView == null || isQuickRepliesOrWelcomeMessagesMode()) {
             return;
@@ -13730,6 +13787,9 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void hideFloatingDateView(boolean animated) {
+        if (DeltaGramUi.stickyDates() && !isQuickRepliesOrWelcomeMessagesMode()) {
+            return;
+        }
         if (floatingDateView.getTag() != null && !currentFloatingDateOnScreen && (!scrollingFloatingDate || currentFloatingTopIsNotMessage)) {
             floatingDateView.setTag(null);
             if (animated) {
@@ -18574,7 +18634,11 @@ public class ChatActivity extends BaseFragment implements
             } else {
                 if (keyboardSize <= AndroidUtilities.dp(20)) {
                     chatEmojiViewPadding = chatActivityEnterView.isPopupShowing() ? chatActivityEnterView.getEmojiPadding() : 0;
+                    if (DeltaGramUi.fixedKeyboardPanel() && chatActivityEnterView.isPopupShowing() && dgLastKeyboardHeight > 0) {
+                        chatEmojiViewPadding = Math.max(chatEmojiViewPadding, dgLastKeyboardHeight);
+                    }
                 } else {
+                    dgLastKeyboardHeight = keyboardSize;
                     chatEmojiViewPadding = 0;
                 }
             }

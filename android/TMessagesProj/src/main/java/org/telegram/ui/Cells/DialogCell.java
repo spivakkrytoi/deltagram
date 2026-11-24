@@ -74,6 +74,7 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.LiteMode;
+import org.telegram.messenger.DeltaGramUi;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
@@ -4968,6 +4969,17 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             }
         }
 
+        if (DeltaGramUi.dialogStripe() && currentDialogId != 0 && !drawArchive && (unreadCount != 0 || markUnread)) {
+            if (dgStripePaint == null) {
+                dgStripePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            }
+            dgStripePaint.setColor(DeltaGramUi.nameColorFor(currentDialogId));
+            dgStripePaint.setAlpha(220);
+            final int stripeWidth = dp(3);
+            final int left = LocaleController.isRTL ? getMeasuredWidth() - stripeWidth : 0;
+            canvas.drawRect(left, dp(9), left + stripeWidth, getMeasuredHeight() - dp(9), dgStripePaint);
+        }
+
         emojiStatusView.setVisibility(emojiStatusVisible ? View.VISIBLE : View.INVISIBLE);
 
         if (needInvalidate) {
@@ -4992,6 +5004,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
 
     private int reorderGradientLastColor;
     private Paint reorderGradientPaint;
+    private Paint dgStripePaint;
     private Paint getPaintReorderGradient() {
         final int color = Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider);
         if (reorderGradientLastColor != color || reorderGradientPaint == null) {

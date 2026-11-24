@@ -63,6 +63,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.DeltaGramUi;
 import org.telegram.messenger.AnimationNotificationsLocker;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.FileLog;
@@ -1433,6 +1434,20 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
                             containerView.setLayerType(LAYER_TYPE_NONE, null);
                         }
                         return false;
+                    }
+                    final int dgSwipeMode = DeltaGramUi.getEdgeSwipeMode();
+                    if (dgSwipeMode == 2) {
+                        maybeStartTracking = false;
+                        startedTracking = false;
+                        return false;
+                    }
+                    if (dgSwipeMode == 1) {
+                        final int dgEdge = AndroidUtilities.dp(24);
+                        if (ev.getX() > dgEdge && ev.getX() < getWidth() - dgEdge) {
+                            maybeStartTracking = false;
+                            startedTracking = false;
+                            return false;
+                        }
                     }
                     startedTrackingPointerId = ev.getPointerId(0);
                     maybeStartTracking = true;

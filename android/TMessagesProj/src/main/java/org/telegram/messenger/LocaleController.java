@@ -724,7 +724,7 @@ public class LocaleController {
         }
 
         systemDefaultLocale = Locale.getDefault();
-        is24HourFormat = DateFormat.is24HourFormat(ApplicationLoader.applicationContext);
+        is24HourFormat = DeltaGramUi.resolve24HourFormat();
         LocaleInfo currentInfo = null;
         boolean override = false;
 
@@ -2040,7 +2040,7 @@ public class LocaleController {
         if (changingConfiguration) {
             return;
         }
-        is24HourFormat = DateFormat.is24HourFormat(ApplicationLoader.applicationContext);
+        is24HourFormat = DeltaGramUi.resolve24HourFormat();
         systemDefaultLocale = newConfig.locale;
         if (languageOverride != null) {
             LocaleInfo toSet = currentLocaleInfo;
@@ -2079,6 +2079,12 @@ public class LocaleController {
     }
 
     public static String formatDateChat(long date, boolean checkYear) {
+        if (DeltaGramUi.fullDate()) {
+            final String full = DeltaGramUi.formatNumericDate(date);
+            if (!TextUtils.isEmpty(full)) {
+                return full;
+            }
+        }
         try {
             Calendar calendar = Calendar.getInstance();
             calendar.setTimeInMillis(System.currentTimeMillis());
@@ -2100,6 +2106,12 @@ public class LocaleController {
         return formatSmallDateChat(date, false);
     }
     public static String formatSmallDateChat(long date, boolean full) {
+        if (DeltaGramUi.fullDate()) {
+            final String fullDate = DeltaGramUi.formatNumericDate(date);
+            if (!TextUtils.isEmpty(fullDate)) {
+                return fullDate;
+            }
+        }
         try {
             Calendar calendar = Calendar.getInstance();
             calendar.setTimeInMillis(System.currentTimeMillis());

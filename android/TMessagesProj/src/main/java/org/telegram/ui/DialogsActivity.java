@@ -105,6 +105,7 @@ import org.telegram.messenger.BotWebViewVibrationEffect;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
+import org.telegram.messenger.DeltaGramUi;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
@@ -8284,7 +8285,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
         if (!actionBar.isActionModeShowed() && !AndroidUtilities.isTablet() && !onlySelect && view instanceof DialogCell && !getMessagesController().isForum(((DialogCell) view).getDialogId()) && !rightSlidingDialogContainer.hasFragment()) {
             DialogCell cell = (DialogCell) view;
-            if (cell.isPointInsideAvatar(x, y)) {
+            if (cell.isPointInsideAvatar(x, y) || DeltaGramUi.quickProfile()) {
                 return showChatPreview(cell);
             }
         }

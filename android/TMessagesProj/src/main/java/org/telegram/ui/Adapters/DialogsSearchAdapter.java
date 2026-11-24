@@ -34,6 +34,7 @@ import org.telegram.SQLite.SQLiteCursor;
 import org.telegram.SQLite.SQLitePreparedStatement;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
+import org.telegram.messenger.DeltaGramUi;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLog;
@@ -133,6 +134,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     private final HashSet<byte[]> seenSponsoredPeers = new HashSet<>();
     private String lastSearchText;
     private boolean searchWas;
+    private String dgPrefixFilter;
     private int reqId = 0;
     private int lastReqId;
     private int reqForumId = 0;
@@ -283,6 +285,33 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     }
 
     private boolean filter(Object obj) {
+        if (dgPrefixFilter != null) {
+            if ("u".equals(dgPrefixFilter)) {
+                if (!(obj instanceof TLRPC.User) || ((TLRPC.User) obj).bot) {
+                    return false;
+                }
+            } else if ("b".equals(dgPrefixFilter)) {
+                if (!(obj instanceof TLRPC.User) || !((TLRPC.User) obj).bot) {
+                    return false;
+                }
+            } else if ("g".equals(dgPrefixFilter)) {
+                if (!(obj instanceof TLRPC.Chat)) {
+                    return false;
+                }
+                final TLRPC.Chat chat = (TLRPC.Chat) obj;
+                if (ChatObject.isChannel(chat) && !ChatObject.isMegagroup(chat)) {
+                    return false;
+                }
+            } else if ("c".equals(dgPrefixFilter)) {
+                if (!(obj instanceof TLRPC.Chat)) {
+                    return false;
+                }
+                final TLRPC.Chat chat = (TLRPC.Chat) obj;
+                if (!ChatObject.isChannel(chat) || ChatObject.isMegagroup(chat)) {
+                    return false;
+                }
+            }
+        }
         if (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT) {
             return true;
         }
@@ -1117,12 +1146,25 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             ConnectionsManager.getInstance(currentAccount).cancelRequest(searchHashtagRequest, true);
             searchHashtagRequest = -1;
         }
-        String query;
+        String parsedQuery;
         if (text != null) {
-            query = text.trim();
+            parsedQuery = text.trim();
         } else {
-            query = null;
+            parsedQuery = null;
         }
+        String parsedPrefix = null;
+        if (DeltaGramUi.searchFilters() && parsedQuery != null && parsedQuery.length() >= 2 && parsedQuery.charAt(1) == ':') {
+            final char kind = Character.toLowerCase(parsedQuery.charAt(0));
+            if (kind == 'g' || kind == 'c' || kind == 'u' || kind == 'b') {
+                parsedPrefix = String.valueOf(kind);
+                parsedQuery = parsedQuery.substring(2).trim();
+                if (parsedQuery.isEmpty()) {
+                    parsedQuery = null;
+                }
+            }
+        }
+        dgPrefixFilter = parsedPrefix;
+        final String query = parsedQuery;
         filterRecent(query);
         if (!TextUtils.equals(sponsoredQuery, query)) {
             sponsoredQuery = query;

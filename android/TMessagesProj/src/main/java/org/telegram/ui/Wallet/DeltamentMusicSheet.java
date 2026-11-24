@@ -6,8 +6,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.animation.ValueAnimator;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Typeface;
@@ -20,7 +18,6 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.TextWatcher;
-import android.util.LruCache;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -43,16 +40,12 @@ import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.UserConfig;
-import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.BottomSheet;
 import org.telegram.ui.Adapters.FiltersView;
 import org.telegram.ui.Components.LayoutHelper;
 
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Iterator;
 
@@ -84,13 +77,6 @@ public class DeltamentMusicSheet extends BottomSheet {
     private static final String PREFS_LIKES = "deltament_soundcloud_likes";
     private static final String KEY_LIKES = "tracks";
 
-    private static final LruCache<String, Bitmap> artworkCache = new LruCache<String, Bitmap>(12 * 1024 * 1024) {
-        @Override
-        protected int sizeOf(String key, Bitmap value) {
-            return value.getByteCount();
-        }
-    };
-
     private final Context context;
     private final int currentAccount;
 
@@ -108,6 +94,10 @@ public class DeltamentMusicSheet extends BottomSheet {
     private TextView miniControl;
     private TextView miniTitle;
     private View searchContainer;
+    private View headerView;
+    private DeltamentNowPlayingView nowPlayingView;
+    private boolean playerExpanded;
+    private boolean openPlayerRequested;
 
     private final ArrayList<DeltamentSoundCloudClient.Track> visible = new ArrayList<>();
     private final DeltamentMusicPlayer music = DeltamentMusicPlayer.getInstance();
@@ -164,11 +154,13 @@ public class DeltamentMusicSheet extends BottomSheet {
                 // keeps the track running; just stop listening to its updates.
                 music.removeListener(musicListener);
                 handler.removeCallbacksAndMessages(null);
+                if (nowPlayingView != null) {
+                    nowPlayingView.release();
+                }
             }
         });
 
-        DeltamentSoundCloudClient.preload(new DeltamentSoundCloudClient.Callback<Boolean>() {
-            @Override
+        DeltamentSoundCloudClient.preload(new DeltamentSoundCloudClient.Callback<Boolean>() {            @Override
             public void onSuccess(Boolean result) {
                 if (source == SOURCE_SOUNDCLOUD && mode == MODE_SEARCH && visible.isEmpty() && TextUtils.isEmpty(query())) {
                     statusView.setText("введите запрос");
@@ -186,8 +178,24 @@ public class DeltamentMusicSheet extends BottomSheet {
 
     // ---------------------------------------------------------------- ui build
 
+    /** Opens the sheet directly on the full now-playing panel. */
+    public DeltamentMusicSheet openPlayer() {
+        openPlayerRequested = true;
+        return this;
+    }
+
+    @Override
+    public void show() {
+        super.show();
+        if (openPlayerRequested) {
+            openPlayerRequested = false;
+            AndroidUtilities.runOnUIThread(this::expandPlayer);
+        }
+    }
+
     private void buildHeader() {
         final FrameLayout header = new FrameLayout(context);
+        headerView = header;
         root.addView(header, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 46));
 
         final TextView close = new TextView(context);
@@ -336,6 +344,10 @@ public class DeltamentMusicSheet extends BottomSheet {
         miniPlayer.setBackground(rounded(COLOR_FIELD, dp(16)));
         miniPlayer.setPadding(dp(6), dp(6), dp(6), dp(6));
         miniPlayer.setVisibility(View.GONE);
+        // Tapping the bar (anywhere but the transport/close buttons) opens the
+        // full now-playing panel with the seek bar and live lyrics.
+        miniPlayer.setOnClickListener(v -> expandPlayer());
+        pressable(miniPlayer);
         root.addView(miniPlayer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 54, 0, 0, 8, 0, 0));
 
         miniControl = new TextView(context);
@@ -356,6 +368,19 @@ public class DeltamentMusicSheet extends BottomSheet {
         miniTitle.setPadding(dp(4), 0, dp(4), 0);
         miniPlayer.addView(miniTitle, LayoutHelper.createLinear(0, LayoutHelper.WRAP_CONTENT, 1f));
 
+        // Explicit entry point to the lyrics/seek panel; the whole bar is
+        // tappable too, but the pill makes the feature discoverable.
+        final TextView lyricsButton = new TextView(context);
+        lyricsButton.setText("Текст");
+        lyricsButton.setTextSize(12);
+        lyricsButton.setTextColor(COLOR_BLUE);
+        lyricsButton.setGravity(Gravity.CENTER);
+        lyricsButton.setBackground(ripple(COLOR_FIELD, dp(14)));
+        lyricsButton.setPadding(dp(10), dp(4), dp(10), dp(4));
+        lyricsButton.setOnClickListener(v -> expandPlayer());
+        pressable(lyricsButton);
+        miniPlayer.addView(lyricsButton, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, 32, 0, 0, 0, 4, 0));
+
         final TextView close = new TextView(context);
         close.setText("✕");
         close.setTextSize(14);
@@ -364,6 +389,54 @@ public class DeltamentMusicSheet extends BottomSheet {
         close.setOnClickListener(v -> stopPlayback());
         pressable(close);
         miniPlayer.addView(close, LayoutHelper.createLinear(36, 36));
+    }
+
+    // -------------------------------------------------------- now playing view
+
+    /** Expands the mini player into the full-height "now playing" panel. */
+    private void expandPlayer() {
+        if (music.currentTrack == null) {
+            return;
+        }
+        if (nowPlayingView == null) {
+            nowPlayingView = new DeltamentNowPlayingView(context, music, this::collapsePlayer);
+            root.addView(nowPlayingView, LayoutHelper.createLinear(
+                    LayoutHelper.MATCH_PARENT, 0, 1f));
+        }
+        playerExpanded = true;
+        headerView.setVisibility(View.GONE);
+        searchContainer.setVisibility(View.GONE);
+        sourceRow.setVisibility(View.GONE);
+        typeRow.setVisibility(View.GONE);
+        modeRow.setVisibility(View.GONE);
+        statusView.setVisibility(View.GONE);
+        scrollView.setVisibility(View.GONE);
+        miniPlayer.setVisibility(View.GONE);
+        searchField.clearFocus();
+        AndroidUtilities.hideKeyboard(searchField);
+        nowPlayingView.setVisibility(View.VISIBLE);
+        nowPlayingView.onShown();
+    }
+
+    /** Returns from the now-playing panel to the search/queue list. */
+    private void collapsePlayer() {
+        if (!playerExpanded) {
+            return;
+        }
+        playerExpanded = false;
+        if (nowPlayingView != null) {
+            nowPlayingView.onHidden();
+            nowPlayingView.setVisibility(View.GONE);
+        }
+        headerView.setVisibility(View.VISIBLE);
+        statusView.setVisibility(View.VISIBLE);
+        scrollView.setVisibility(View.VISIBLE);
+        miniPlayer.setVisibility(music.currentTrack != null ? View.VISIBLE : View.GONE);
+        final int listModeVisibility = queueMode ? View.GONE : View.VISIBLE;
+        searchContainer.setVisibility(listModeVisibility);
+        sourceRow.setVisibility(listModeVisibility);
+        typeRow.setVisibility(listModeVisibility);
+        modeRow.setVisibility(listModeVisibility);
     }
 
     private static GradientDrawable rounded(int color, float radius) {
@@ -418,6 +491,9 @@ public class DeltamentMusicSheet extends BottomSheet {
     }
 
     private void showMiniPlayerAnimated() {
+        if (playerExpanded) {
+            return;
+        }
         if (miniPlayer.getVisibility() != View.VISIBLE) {
             miniPlayer.setVisibility(View.VISIBLE);
             miniPlayer.setAlpha(0f);
@@ -545,6 +621,9 @@ public class DeltamentMusicSheet extends BottomSheet {
         row.setOnClickListener(v -> {
             if (track.album) {
                 openAlbum(track);
+            } else if (music.currentTrack != null && music.currentTrack.id == track.id) {
+                // Tapping the track that is already playing opens the player.
+                expandPlayer();
             } else {
                 playTrack(track);
             }
@@ -881,19 +960,24 @@ public class DeltamentMusicSheet extends BottomSheet {
         }
         setStatus("");
         for (int i = 0; i < queue.size(); i++) {
+            final int rowIndex = i;
             final DeltamentSoundCloudClient.Track track = queue.get(i);
             final LinearLayout row = new LinearLayout(context);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(8), dp(10), dp(8), dp(10));
-            if (i == music.queueIndex) {
+            if (rowIndex == music.queueIndex) {
                 row.setBackground(ripple(0xFF2A2A2D, dp(12)));
             } else {
                 row.setBackground(ripple(0x00000000, dp(12)));
             }
             row.setOnClickListener(v -> {
-                music.playAt(indexOfTrack(track));
-                renderQueue();
+                if (rowIndex == music.queueIndex) {
+                    expandPlayer();
+                } else {
+                    music.playAt(indexOfTrack(track));
+                    renderQueue();
+                }
             });
 
             final LinearLayout textColumn = new LinearLayout(context);
@@ -1038,46 +1122,7 @@ public class DeltamentMusicSheet extends BottomSheet {
     // ----------------------------------------------------------------- artwork
 
     private void loadArtwork(String url, ImageView imageView) {
-        if (TextUtils.isEmpty(url)) {
-            imageView.setImageDrawable(null);
-            return;
-        }
-        imageView.setTag(url);
-        final Bitmap cached = artworkCache.get(url);
-        if (cached != null) {
-            imageView.setImageBitmap(cached);
-            return;
-        }
-        Utilities.globalQueue.postRunnable(() -> {
-            Bitmap bitmap = null;
-            HttpURLConnection connection = null;
-            try {
-                connection = (HttpURLConnection) new URL(url).openConnection();
-                connection.setConnectTimeout(15000);
-                connection.setReadTimeout(20000);
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0");
-                if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                    try (InputStream input = connection.getInputStream()) {
-                        bitmap = BitmapFactory.decodeStream(input);
-                    }
-                }
-            } catch (Throwable e) {
-                FileLog.e(e);
-            } finally {
-                if (connection != null) {
-                    connection.disconnect();
-                }
-            }
-            final Bitmap result = bitmap;
-            if (result != null) {
-                artworkCache.put(url, result);
-                AndroidUtilities.runOnUIThread(() -> {
-                    if (url.equals(imageView.getTag())) {
-                        imageView.setImageBitmap(result);
-                    }
-                });
-            }
-        });
+        DeltamentArtwork.load(url, imageView);
     }
 
     // ------------------------------------------------------------- segment view

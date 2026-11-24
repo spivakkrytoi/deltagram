@@ -13,12 +13,14 @@ import android.text.style.MetricAffectingSpan;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.DeltaGramUi;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.TextStyleSpan;
+import org.telegram.ui.Components.TypefaceSpan;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -89,7 +91,7 @@ public class CodeHighlighting {
             if (style != null) {
                 style.applyStyle(p);
             } else {
-                p.setTypeface(Typeface.MONOSPACE);
+                p.setTypeface(DeltaGramUi.monoCode() ? Typeface.MONOSPACE : Typeface.DEFAULT);
                 p.setUnderlineText(false);
             }
         }
@@ -324,7 +326,9 @@ public class CodeHighlighting {
     public static SpannableString getHighlighted(CharSequence text, String language) {
         CharSequence source = text == null ? "" : text;
         String normalized = PrismaHighlightingService.normalizeLanguage(language);
-        if (normalized.isEmpty() || source.length() == 0) return new SpannableString(source);
+        if (!DeltaGramUi.syntaxHighlight() || normalized.isEmpty() || source.length() == 0) {
+            return new SpannableString(source);
+        }
         CacheKey key = new CacheKey(normalized, source.toString());
         LockedSpannableString result;
         boolean cacheable =
@@ -350,6 +354,16 @@ public class CodeHighlighting {
         return result;
     }
 
+    private static void applyDeltaGramTypeface(SpannableString text) {
+        if (text != null && text.length() > 0 && !DeltaGramUi.monoCode()) {
+            text.setSpan(
+                    new TypefaceSpan(Typeface.DEFAULT),
+                    0,
+                    text.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+    }
+
     /**
      * Callback receives a snapshot on the UI thread; editors should check their own text revision.
      */
@@ -357,6 +371,11 @@ public class CodeHighlighting {
             CharSequence text, String language, Utilities.Callback<SpannableString> whenDone) {
         if (whenDone == null) return;
         SpannableString result = new SpannableString(text == null ? "" : text);
+        if (!DeltaGramUi.syntaxHighlight()) {
+            applyDeltaGramTypeface(result);
+            AndroidUtilities.runOnUIThread(() -> whenDone.run(result));
+            return;
+        }
         String normalized = PrismaHighlightingService.normalizeLanguage(language);
         if (normalized.isEmpty() || result.length() == 0) {
             AndroidUtilities.runOnUIThread(() -> whenDone.run(result));
@@ -427,6 +446,7 @@ public class CodeHighlighting {
             TextStyleSpan.TextStyleRun style,
             boolean smallerSize) {
         if (text == null) return;
+        if (!DeltaGramUi.syntaxHighlight()) return;
         if (start < 0 || end < start || end > text.length()) throw new IndexOutOfBoundsException();
         Pending pending = new Pending(text.subSequence(start, end).toString());
         long range = ((long) start << 32) | (end & 0xffffffffL);

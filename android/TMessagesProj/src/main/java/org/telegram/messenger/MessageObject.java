@@ -8929,6 +8929,10 @@ public class MessageObject {
                 } else {
                     layoutPaint = Theme.chat_msgTextCodePaint;
                 }
+                if (!DeltaGramUi.monoCode()) {
+                    layoutPaint = new TextPaint(layoutPaint);
+                    layoutPaint.setTypeface(Typeface.DEFAULT);
+                }
             }
 
             CharSequence blockText = text.subSequence(range.start, range.end);
@@ -9392,6 +9396,10 @@ public class MessageObject {
                         layoutPaint = Theme.chat_msgTextCode2Paint;
                     } else {
                         layoutPaint = Theme.chat_msgTextCodePaint;
+                    }
+                    if (!DeltaGramUi.monoCode()) {
+                        layoutPaint = new TextPaint(layoutPaint);
+                        layoutPaint.setTypeface(Typeface.DEFAULT);
                     }
                 }
 

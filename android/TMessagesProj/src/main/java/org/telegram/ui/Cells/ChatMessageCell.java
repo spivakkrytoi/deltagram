@@ -105,6 +105,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AppGlobalConfig;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BotForumHelper;
+import org.telegram.messenger.DeltaGramUi;
 import org.telegram.messenger.BotInlineKeyboard;
 import org.telegram.messenger.ChatMessageSharedResources;
 import org.telegram.messenger.ChatObject;
@@ -22272,7 +22273,25 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             canvas.translate(nx, ny);
             oldAlpha = Theme.chat_namePaint.getAlpha();
             Theme.chat_namePaint.setAlpha((int) (oldAlpha * nameAlpha));
+            final boolean dgColorName = !currentMessageObject.isOutOwner()
+                    && (DeltaGramUi.coloredNames() || DeltaGramUi.gradientNames());
+            if (dgColorName) {
+                final long senderId = currentMessageObject.getSenderId();
+                final int dgPrimary = DeltaGramUi.nameColorFor(senderId);
+                if (DeltaGramUi.gradientNames()) {
+                    final int dgSecondary = DeltaGramUi.nameColorSecondaryFor(senderId);
+                    final float dgWidth = Math.max(1f, nameLayoutWidth);
+                    Theme.chat_namePaint.setShader(new LinearGradient(
+                            0, 0, dgWidth, 0, dgPrimary, dgSecondary, Shader.TileMode.CLAMP));
+                } else {
+                    Theme.chat_namePaint.setShader(null);
+                    Theme.chat_namePaint.setColor(dgPrimary);
+                }
+            }
             nameLayout.draw(canvas);
+            if (dgColorName) {
+                Theme.chat_namePaint.setShader(null);
+            }
             Theme.chat_namePaint.setAlpha(oldAlpha);
             canvas.restore();
 

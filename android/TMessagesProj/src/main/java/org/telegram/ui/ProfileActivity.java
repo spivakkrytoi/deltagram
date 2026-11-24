@@ -61,6 +61,10 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.net.Uri;
@@ -269,8 +273,10 @@ import org.telegram.ui.Components.Premium.boosts.UserSelectorBottomSheet;
 import org.telegram.ui.Components.ProfileGalleryView;
 import org.telegram.ui.Components.ProfileGooeyView;
 import org.telegram.ui.Components.ProfileMusicView;
+import org.telegram.ui.Wallet.DeltamentMusicPlayer;
 import org.telegram.ui.Wallet.DeltamentMusicPlayerFragment;
 import org.telegram.ui.Wallet.DeltamentMusicSheet;
+import org.telegram.ui.Wallet.DeltamentSoundCloudClient;
 import org.telegram.ui.Components.ProfileBalanceView;
 import org.telegram.ui.Wallet.GramWallet;
 import org.telegram.ui.Wallet.ProfileWalletCardDialog;
@@ -402,6 +408,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private ProfileActionsView actionsView;
     private MessagesController.SavedMusicList savedMusicList;
     private ProfileMusicView musicView;
+    private DeltamentMusicPlayer.Listener profileMusicListener;
     private ProfileBalanceView balanceView;
     private AnimatedStatusView animatedStatusView;
     private AvatarImageView avatarImage;
@@ -525,6 +532,38 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private boolean searchMode;
 
     private FlagSecureReason flagSecure;
+
+    // DeltaGram: subtle gyroscope parallax for the avatar and gift bubbles.
+    private SensorManager parallaxSensorManager;
+    private Sensor parallaxGyro;
+    private boolean parallaxRegistered;
+    private float parallaxX, parallaxY;
+    private long parallaxLastTimestamp;
+    private final SensorEventListener parallaxListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (avatarContainer2 == null) {
+                return;
+            }
+            final long now = event.timestamp;
+            final float dt = parallaxLastTimestamp == 0 ? 0.016f
+                    : Math.min(0.06f, (now - parallaxLastTimestamp) / 1_000_000_000f);
+            parallaxLastTimestamp = now;
+            final float maxX = dp(7f);
+            final float maxY = dp(5f);
+            final float targetX = Math.max(-maxX, Math.min(maxX, -event.values[1] * dp(13f)));
+            final float targetY = Math.max(-maxY, Math.min(maxY, event.values[0] * dp(10f)));
+            final float k = 1f - (float) Math.exp(-dt / 0.08f);
+            parallaxX += (targetX - parallaxX) * k;
+            parallaxY += (targetY - parallaxY) * k;
+            avatarContainer2.setTranslationX(parallaxX);
+            avatarContainer2.setTranslationY(parallaxY);
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        }
+    };
 
     private HashMap<Integer, Integer> positionToOffset = new HashMap<>();
 
@@ -2304,6 +2343,21 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         getNotificationCenter().addObserver(this, NotificationCenter.profileMusicUpdated);
         getNotificationCenter().addObserver(this, NotificationCenter.updatedChatRanks);
         NotificationCenter.getGlobalInstance().addObserver(this, NotificationCenter.emojiLoaded);
+
+        // DeltaGram: mirror the track that the built-in player is streaming in
+        // the profile music pill, so the header really is "musical".
+        profileMusicListener = new DeltamentMusicPlayer.Listener() {
+            @Override
+            public void onTrackChanged(DeltamentSoundCloudClient.Track track) {
+                AndroidUtilities.runOnUIThread(ProfileActivity.this::updateMusicPill);
+            }
+
+            @Override
+            public void onPlaybackStateChanged(boolean playing, boolean prepared) {
+                AndroidUtilities.runOnUIThread(ProfileActivity.this::updateMusicPill);
+            }
+        };
+        DeltamentMusicPlayer.getInstance().addListener(profileMusicListener);
         updateRowsIds();
         if (listAdapter != null) {
             listAdapter.notifyDataSetChanged();
@@ -2423,6 +2477,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
+        stopAvatarParallax();
         if (sharedMediaLayout != null) {
             sharedMediaLayout.onDestroy();
         }
@@ -2453,6 +2508,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         getNotificationCenter().removeObserver(this, NotificationCenter.profileMusicUpdated);
         getNotificationCenter().removeObserver(this, NotificationCenter.updatedChatRanks);
         NotificationCenter.getGlobalInstance().removeObserver(this, NotificationCenter.emojiLoaded);
+        if (profileMusicListener != null) {
+            DeltamentMusicPlayer.getInstance().removeListener(profileMusicListener);
+            profileMusicListener = null;
+        }
         if (avatarsViewPager != null) {
             avatarsViewPager.onDestroy();
         }
@@ -9706,6 +9765,54 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         showDialog(new DeltamentPublicCardSheet(getParentActivity(), currentAccount, publicCard, kind, resourcesProvider));
     }
 
+    private void startAvatarParallax() {
+        if (parallaxRegistered || avatarContainer2 == null) {
+            return;
+        }
+        if (!MessagesController.getGlobalMainSettings().getBoolean("dg_avatar_parallax", true)) {
+            return;
+        }
+        try {
+            if (parallaxSensorManager == null) {
+                parallaxSensorManager = (SensorManager) ApplicationLoader.applicationContext.getSystemService(Context.SENSOR_SERVICE);
+            }
+            if (parallaxSensorManager == null) {
+                return;
+            }
+            if (parallaxGyro == null) {
+                parallaxGyro = parallaxSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+            }
+            if (parallaxGyro == null) {
+                return;
+            }
+            parallaxLastTimestamp = 0;
+            parallaxSensorManager.registerListener(parallaxListener, parallaxGyro, SensorManager.SENSOR_DELAY_GAME);
+            parallaxRegistered = true;
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+    }
+
+    private void stopAvatarParallax() {
+        if (!parallaxRegistered) {
+            return;
+        }
+        try {
+            if (parallaxSensorManager != null) {
+                parallaxSensorManager.unregisterListener(parallaxListener);
+            }
+        } catch (Throwable ignore) {
+        }
+        parallaxRegistered = false;
+        parallaxLastTimestamp = 0;
+        parallaxX = 0f;
+        parallaxY = 0f;
+        if (avatarContainer2 != null) {
+            avatarContainer2.setTranslationX(0f);
+            avatarContainer2.setTranslationY(0f);
+        }
+    }
+
     public void onResume() {
         super.onResume();
         org.telegram.messenger.DeltagramCards.addListener(cardsRegistryListener);
@@ -9754,11 +9861,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         }
         updateItemsUsername();
         needLayout(false);
+        startAvatarParallax();
     }
 
     @Override
     public void onPause() {
         super.onPause();
+        stopAvatarParallax();
         org.telegram.messenger.DeltagramCards.removeListener(cardsRegistryListener);
         if (undoView != null) {
             undoView.hide(true, 0);
@@ -11223,11 +11332,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             actionsView.set(ProfileActionsView.KEY_JOIN, hasJoinRow);
         }
         if (musicView != null) {
-            if (userInfo != null && userInfo.saved_music != null) {
-                musicView.setMusicDocument(userInfo.saved_music);
-            } else if (myProfile) {
-                musicView.setText("SoundCloud", " · DeltaGram Music");
-            }
+            updateMusicPill();
             musicView.setVisibility(hasMusic ? View.VISIBLE : View.GONE);
             musicView.invalidate();
         }
@@ -11235,6 +11340,23 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             updateBalancePosition();
             updateCardsBalance();
             balanceView.invalidate();
+        }
+    }
+
+    /** Shows the DeltaGram player track (if any) in the profile music pill. */
+    private void updateMusicPill() {
+        if (musicView == null) {
+            return;
+        }
+        final DeltamentSoundCloudClient.Track track = DeltamentMusicPlayer.getInstance().currentTrack;
+        if (track != null) {
+            final String artist = TextUtils.isEmpty(track.artist) ? "DeltaGram Music" : track.artist;
+            final String title = TextUtils.isEmpty(track.title) ? "" : " — " + track.title;
+            musicView.setText(artist, title);
+        } else if (userInfo != null && userInfo.saved_music != null) {
+            musicView.setMusicDocument(userInfo.saved_music);
+        } else {
+            musicView.setText("DeltaGram Music", " — плейлист профиля");
         }
     }
 

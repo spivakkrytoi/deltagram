@@ -17,7 +17,9 @@ import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
+import org.telegram.messenger.DeltaGramUi;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.MessageObject;
@@ -326,7 +328,8 @@ public class ChatListItemAnimator extends DefaultItemAnimator {
     public boolean animateAdd(RecyclerView.ViewHolder holder) {
         resetAnimation(holder);
         holder.itemView.setAlpha(0);
-        if (!shouldAnimateEnterFromBottom) {
+        final boolean dgFromBottom = shouldAnimateEnterFromBottom || DeltaGramUi.messageAnim();
+        if (!dgFromBottom) {
             holder.itemView.setScaleX(0.9f);
             holder.itemView.setScaleY(0.9f);
         } else {
@@ -342,7 +345,11 @@ public class ChatListItemAnimator extends DefaultItemAnimator {
         final View view = holder.itemView;
         final ViewPropertyAnimator animation = view.animate();
         mAddAnimations.add(holder);
-        view.setTranslationY(addedItemsHeight);
+        int dgStartY = addedItemsHeight;
+        if (DeltaGramUi.messageAnim() && dgStartY == 0) {
+            dgStartY = AndroidUtilities.dp(18);
+        }
+        view.setTranslationY(dgStartY);
         holder.itemView.setScaleX(1);
         holder.itemView.setScaleY(1);
         ChatMessageCell chatMessageCell = holder.itemView instanceof ChatMessageCell ? (ChatMessageCell) holder.itemView : null;
@@ -1398,6 +1405,9 @@ public class ChatListItemAnimator extends DefaultItemAnimator {
         }
         final View view = holder.itemView;
         mAddAnimations.add(holder);
+        if (DeltaGramUi.messageAnim() && view.getTranslationY() == 0) {
+            view.setTranslationY(AndroidUtilities.dp(18));
+        }
         if (holder == greetingsSticker) {
             view.setAlpha(1f);
         }

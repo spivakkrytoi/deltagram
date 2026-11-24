@@ -36,6 +36,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
+import org.telegram.messenger.DeltaGramUi;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
@@ -1803,6 +1804,17 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter implements
             for (int i = 0; i < itemInternals.size(); ++i) {
                 ItemInternal item = itemInternals.get(i);
                 if (item.viewType == VIEW_TYPE_DIALOG && item.dialog != null && messagesController.isHiddenByUndo(item.dialog.id)) {
+                    itemInternals.remove(i);
+                    i--;
+                }
+            }
+        }
+
+        if (DeltaGramUi.unreadOnly() && dialogsType == DialogsActivity.DIALOGS_TYPE_DEFAULT) {
+            for (int i = 0; i < itemInternals.size(); ++i) {
+                ItemInternal item = itemInternals.get(i);
+                if (item.viewType == VIEW_TYPE_DIALOG && item.dialog != null
+                        && item.dialog.unread_count == 0 && !item.dialog.unread_mark) {
                     itemInternals.remove(i);
                     i--;
                 }

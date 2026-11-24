@@ -69,6 +69,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -8889,6 +8890,71 @@ public class MessagesStorage extends BaseController {
                     cursor.dispose();
                     cursor = null;
                 }
+            }
+        });
+    }
+
+    /**
+     * Computes "chat wrapped" numbers locally from the messages database.
+     * Reads at most {@link DeltaGramChatStats#MAX_SCANNED} newest messages so
+     * huge chats do not block the storage queue for too long.
+     */
+    public void getChatStats(long dialogId, DeltaGramChatStats.Callback callback) {
+        storageQueue.postRunnable(() -> {
+            DeltaGramChatStats stats = null;
+            SQLiteCursor cursor = null;
+            try {
+                final long selfId = UserConfig.getInstance(currentAccount).clientUserId;
+                final DeltaGramChatStats.Builder builder = new DeltaGramChatStats.Builder(selfId, dialogId);
+
+                int totalMessages = 0;
+                int oldestMid = 0;
+                cursor = database.queryFinalized(String.format(Locale.US,
+                        "SELECT COUNT(mid), MIN(mid) FROM messages_v2 WHERE uid = %d AND date > 0 AND mid > 0",
+                        dialogId));
+                if (cursor.next()) {
+                    totalMessages = cursor.intValue(0);
+                    oldestMid = cursor.intValue(1);
+                }
+                cursor.dispose();
+                cursor = null;
+
+                cursor = database.queryFinalized(String.format(Locale.US,
+                        "SELECT date, data FROM messages_v2 WHERE uid = %d AND date > 0 AND mid > 0 ORDER BY date DESC LIMIT %d",
+                        dialogId, DeltaGramChatStats.MAX_SCANNED));
+                while (cursor.next()) {
+                    final int date = cursor.intValue(0);
+                    final NativeByteBuffer data = cursor.byteBufferValue(1);
+                    if (data == null) {
+                        continue;
+                    }
+                    TLRPC.Message message = null;
+                    try {
+                        message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                    } catch (Exception e) {
+                        checkSQLException(e);
+                    } finally {
+                        data.reuse();
+                    }
+                    if (message == null) {
+                        continue;
+                    }
+                    builder.add(message, date);
+                }
+
+                stats = builder.build();
+                stats.totalMessages = totalMessages;
+                stats.dbOldestMid = oldestMid;
+                stats.truncated = totalMessages > stats.scannedMessages;
+            } catch (Exception e) {
+                checkSQLException(e);
+            } finally {
+                if (cursor != null) {
+                    cursor.dispose();
+                }
+                final DeltaGramChatStats result = stats != null ? stats : new DeltaGramChatStats();
+                result.dialogId = dialogId;
+                AndroidUtilities.runOnUIThread(() -> callback.run(result));
             }
         });
     }

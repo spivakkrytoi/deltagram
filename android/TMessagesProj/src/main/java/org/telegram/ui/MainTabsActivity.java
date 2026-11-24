@@ -80,6 +80,8 @@ import org.telegram.ui.Components.blur3.source.BlurredBackgroundSourceRenderNode
 import org.telegram.ui.Components.chat.ViewPositionWatcher;
 import org.telegram.ui.Components.glass.GlassTabView;
 import org.telegram.ui.Stories.recorder.HintView2;
+import org.telegram.ui.Wallet.DeltamentMiniPlayerView;
+import org.telegram.ui.Wallet.DeltamentMusicSheet;
 import org.telegram.ui.Wallet.WalletActivity;
 
 import java.util.ArrayList;
@@ -116,6 +118,7 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
 
     private UpdateLayoutWrapper updateLayoutWrapper;
     private FrameLayout tabsViewWrapper;
+    private DeltamentMiniPlayerView miniPlayerView;
     private MainTabsLayout tabsView;
     private BlurredBackgroundDrawable tabsViewBackground;
     private View fadeView;
@@ -275,6 +278,9 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         blur3_updateColors();
         checkContactsTabBadge();
         checkUnreadCount(true);
+        if (miniPlayerView != null) {
+            miniPlayerView.refreshVisibility();
+        }
 
         showAccountChangeHint();
     }
@@ -383,6 +389,23 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabsViewWrapper.addView(tabsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
         tabsViewWrapper.setClipToPadding(false);
         contentView.addView(tabsViewWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
+
+        // DeltaGram: floating now-playing capsule above the tab bar. It shows
+        // up as soon as a track is playing and stays out of the chat screens,
+        // because those are pushed on top as separate fragments.
+        miniPlayerView = new DeltamentMiniPlayerView(context, () -> {
+            if (getParentActivity() != null) {
+                new DeltamentMusicSheet(getParentActivity()).openPlayer().show();
+            }
+        });
+        final FrameLayout.LayoutParams miniPlayerParams = new FrameLayout.LayoutParams(
+                LayoutHelper.MATCH_PARENT, dp(64));
+        miniPlayerParams.gravity = Gravity.BOTTOM;
+        miniPlayerParams.leftMargin = dp(12);
+        miniPlayerParams.rightMargin = dp(12);
+        miniPlayerParams.bottomMargin = AndroidUtilities.navigationBarHeight
+                + dp(DialogsActivity.MAIN_TABS_HEIGHT_WITH_MARGINS) + dp(6);
+        contentView.addView(miniPlayerView, miniPlayerParams);
 
         updateLayoutWrapper = new UpdateLayoutWrapper(context);
         contentView.addView(updateLayoutWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
@@ -1084,6 +1107,17 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         tabsView.setEnabled(factor > 1);
         tabsView.setAlpha(factor);
         tabsView.setVisibility(factor > 0 ? View.VISIBLE : View.GONE);
+
+        if (miniPlayerView != null) {
+            miniPlayerView.setTranslationY(lerp(hiddenY, normalY, factor));
+            final FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) miniPlayerView.getLayoutParams();
+            // Leave room for the compose button on the chats tab.
+            final int right = dp(viewPager != null && viewPager.getCurrentPosition() == POSITION_CHATS ? 76 : 12);
+            if (lp.rightMargin != right) {
+                lp.rightMargin = right;
+                miniPlayerView.setLayoutParams(lp);
+            }
+        }
     }
 
     private void checkUi_callTabVisible(boolean callTabsVisible, boolean animated) {

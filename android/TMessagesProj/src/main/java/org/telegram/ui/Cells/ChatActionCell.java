@@ -64,6 +64,7 @@ import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.DeltaGramUi;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BotInlineKeyboard;
 import org.telegram.messenger.BuildVars;
@@ -487,6 +488,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
     private int giftPremiumAdditionalHeight;
     private boolean forceWasUnread;
     private RectF backgroundRect;
+    private Paint dgCompactDatePaint;
     private ImageReceiver.ImageReceiverDelegate giftStickerDelegate = (imageReceiver1, set, thumb, memCache) -> {
         if (set) {
             RLottieDrawable drawable = imageReceiver.getLottieAnimation();
@@ -3713,7 +3715,11 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
             backgroundPaint.setAlpha((int) (oldAlpha * (isFloating() ? .75f : 1f)));
             darkenBackgroundPaint.setAlpha((int) (oldAlpha2 * (isFloating() ? .75f : 1f)));
         }
-        if (currentMessageObject == null || !currentMessageObject.isRepostPreview) {
+        final boolean dgCompactDate = currentMessageObject != null
+                && currentMessageObject.isDateObject
+                && !isFloating()
+                && DeltaGramUi.compactDates();
+        if (!dgCompactDate && (currentMessageObject == null || !currentMessageObject.isRepostPreview)) {
             canvas.drawPath(backgroundPath, backgroundPaint);
             if (hasGradientService() && darkenBackgroundPaint.getAlpha() > 0) {
                 canvas.drawPath(backgroundPath, darkenBackgroundPaint);
@@ -3725,6 +3731,23 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
                 }
                 canvas.drawPath(backgroundPath, dimPaint);
                 dimPaint.setAlpha(wasAlpha);
+            }
+        }
+        if (dgCompactDate && textLayout != null && getWidth() > 0) {
+            if (dgCompactDatePaint == null) {
+                dgCompactDatePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                dgCompactDatePaint.setStrokeWidth(dp(1));
+            }
+            dgCompactDatePaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText3));
+            dgCompactDatePaint.setAlpha(90);
+            final int lineY = textY + textHeight / 2;
+            final float textLeft = textX;
+            final float textRight = textX + textWidth;
+            if (textLeft > dp(12)) {
+                canvas.drawLine(0, lineY, textLeft - dp(10), lineY, dgCompactDatePaint);
+            }
+            if (textRight < getWidth() - dp(12)) {
+                canvas.drawLine(textRight + dp(10), lineY, getWidth(), lineY, dgCompactDatePaint);
             }
         }
 
