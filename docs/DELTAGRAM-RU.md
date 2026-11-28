@@ -189,7 +189,7 @@ DeltaGram — самостоятельный MTProto-сервер (совмес�
 
 ### 8.2. Gift Lab / Mini App
 
-- Бот: `@kjndsajnksadjnkasdnjkasdbot`.
+- Бот: `@kjndsajnksadjnkasdnjkasdbot` (отображаемое имя — DeltaGram Gift Lab).
 - Токен: `/etc/deltagram-gift-lab.env` (права `600`), не публикуется.
 - Mini App: `https://dltagram.duckdns.org/gift-lab/`.
 - Проверка `initData` обязательна; доступ только владельцам из
