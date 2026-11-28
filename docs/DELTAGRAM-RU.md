@@ -5,6 +5,8 @@
 > Токены и пароли в документ не входят: они хранятся только в env-файлах
 > на сервере.
 
+Интерактивная версия этой документации: `https://dltagram.duckdns.org/docs/`.
+
 ## 1. Что такое DeltaGram
 
 DeltaGram — самостоятельный MTProto-сервер (совместимый с Telegram-клиентами),
@@ -34,8 +36,10 @@ DeltaGram — самостоятельный MTProto-сервер (совмес�
   `https://dltagram.duckdns.org/downloads/DeltaGram-frames-banner-20261128.apk`
   SHA-256 `db725c48840318e9b835b6be23ca0b76aeabfd93431c72a1a8962969c78e350d`
 - Gift Lab: `https://dltagram.duckdns.org/gift-lab/`
+- Веб-версия: `https://dltagram.duckdns.org/web/`
+- Документация: `https://dltagram.duckdns.org/docs/`
 - Bot API: `https://dltagram.duckdns.org/botapi/bot<token>/<method>`
-- Windows EXE: публикуется после успешной CI-сборки (см. раздел 10)
+- Windows EXE: публикуется после успешной CI-сборки (см. раздел 11)
 
 ## 3. Архитектура и сеть
 
@@ -45,7 +49,10 @@ DeltaGram — самостоятельный MTProto-сервер (совмес�
   - `/investor/*` → `127.0.0.1:2802`;
   - `/gift-lab/*` → `127.0.0.1:2810`;
   - `/botapi/*` → Bot API `127.0.0.1:8081` (префикс `/botapi`
-    отрезается Caddy).
+    отрезается Caddy);
+  - `/docs/*` → статическая документация `/data/docs`;
+  - `/web/*` → Telegram Web A `/data/web`;
+  - `/apiws*` → MTProto-over-WebSocket `127.0.0.1:2398`.
 - Отдельный поддомен `admin.dltagram.duckdns.org` удалён: админка доступна
   только по IP и порту `2600`.
 - Все контейнеры имеют `restart: unless-stopped`; на хосте включён
@@ -211,11 +218,11 @@ DeltaGram — самостоятельный MTProto-сервер (совмес�
   `POST /v1/gifts/give` с `upgrade=true` и `allow_disabled=true`.
 - Идемпотентность: каждый запрос содержит `requestID`; повторная отправка
   того же запроса не создаёт второй подарок.
-- Команды бота: `/start`, `/help`, `/id`. Кнопка «Открыть Gift Lab»
-  открывает Mini App.
-- В магазине бота `@deltagram_robot` (репозиторий `deltagram-bot`) для
-  владельца добавлена кнопка **Gift Lab** (`GIFTLAB_URL`). Изменение
-  закоммичено и опубликовано в GitHub.
+- Команды бота: `/start`, `/help`, `/id`. В ответе — цветные inline-кнопки:
+  **🎁 Открыть Gift Lab** (`style: success`) и **📖 Как это работает**
+  (`style: primary`, ведёт на этот сайт документации).
+- Изменения в магазине основного бота `@deltagram_robot` откатаны: он пока
+  работает без кнопки Mini App.
 
 ## 9. Bot API и BotFather
 
@@ -277,7 +284,19 @@ curl -X POST https://dltagram.duckdns.org/botapi/bot<TOKEN>/sendMessage \
 задаётся через админ-панель. Остальные основные команды, включая
 `/deletebot`, реализованы.
 
-## 10. Windows EXE
+## 10. Веб-версия
+
+- Адрес: `https://dltagram.duckdns.org/web/`.
+- Клиент: Telegram Web A (`Ajaxy/telegram-tt`), собранный под DeltaGram.
+- Транспорт: `wss://dltagram.duckdns.org/apiws` → Caddy → `telesrv:2398`.
+- В клиенте изменён WebSocket endpoint на same-origin `/apiws`; сырой
+  MTProto-порт `2398` из HTTPS-браузера недоступен.
+- Вход по номеру DeltaGram; код приходит в Telegram/`777000`.
+- QR-вход использует тот же MTProto и работает через тот же WebSocket.
+- Включены `TELESRV_WEBSOCKET_ENABLE=true` и origin
+  `https://dltagram.duckdns.org` в `TELESRV_WEBSOCKET_ALLOWED_ORIGINS`.
+
+## 11. Windows EXE
 
 CI: `spivakkrytoi/deltagram-desktop`, workflow `deltagram-windows.yml`,
 ветка `dg-win-layer233`.
@@ -291,7 +310,7 @@ CI: `spivakkrytoi/deltagram-desktop`, workflow `deltagram-windows.yml`,
 После успешной сборки ZIP публикуется в `/downloads/` и указывается
 SHA-256. Старый архив layer 234 с текущим сервером несовместим.
 
-## 11. Безопасность
+## 12. Безопасность
 
 - Все секреты — только в env-файлах на сервере (`/etc/...env`,
   `deploy/docker/.env`), права `600`.
@@ -303,7 +322,7 @@ SHA-256. Старый архив layer 234 с текущим сервером н
 - Для бота Gift Lab использовать отдельный токен; при утечке — перевыпустить
   у @BotFather и обновить `/etc/deltagram-gift-lab.env`.
 
-## 12. Диагностика
+## 13. Диагностика
 
 ```bash
 # контейнеры
@@ -337,11 +356,12 @@ podman pod start pod_gramsrv-main
 podman start caddy grammystore_app
 ```
 
-## 13. Ограничения
+## 14. Ограничения
 
 - Реальная выдача NFT/подарков на блокчейн требует отдельной защищённой
   серверной интеграции; сейчас доступна выдача в DeltaGram.
 - Windows-клиент layer 233 появляется только после успешного CI.
+- Веб-версия использует один DeltaGram DC; мульти-DC переключение не настроено.
 - В BotFather пока нет `/setuserpic`; аватар бота задаётся через
   админ-панель. Остальные основные команды реализованы.
 - Gift Lab показывает и выдаёт в том числе подарки, снятые с продажи
