@@ -6244,10 +6244,10 @@ index 9df8439..00fed17 100644
    connect(port: number, ip: string, isTestServer = false, isPremium = false) {
 diff --git a/src/styles/deltagram.scss b/src/styles/deltagram.scss
 new file mode 100644
-index 0000000..d013c4c
+index 0000000..ff7ed70
 --- /dev/null
 +++ b/src/styles/deltagram.scss
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,35 @@
 +// DeltaGram visual extras toggled from Settings → DeltaGram.
 +
 +html.dg-ios-motion {
@@ -6265,8 +6265,7 @@ index 0000000..d013c4c
 +    transform: scale(0.97);
 +  }
 +
-+  .Menu,
-+  .MenuPortal,
++  .Menu .bubble,
 +  .Modal,
 +  #LeftColumn,
 +  .MiddleHeader,
@@ -6277,7 +6276,7 @@ index 0000000..d013c4c
 +    backdrop-filter: blur(1.5rem) saturate(1.6);
 +  }
 +
-+  .Menu,
++  .Menu .bubble,
 +  .Modal {
 +    box-shadow:
 +      0 1.5rem 3rem rgba(0, 0, 0, 0.35),
@@ -6298,10 +6297,10 @@ index a9a430d..2693eca 100644
  export type StickerSetOrReactionsSetOrRecent = Pick<ApiStickerSet, (
 diff --git a/src/util/deltagram/prefs.ts b/src/util/deltagram/prefs.ts
 new file mode 100644
-index 0000000..9ff5484
+index 0000000..02e9e5a
 --- /dev/null
 +++ b/src/util/deltagram/prefs.ts
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,99 @@
 +// DeltaGram web preferences. These mirror the most visible options of the
 +// Android DeltaGram settings: interface scale, bubble radius, seconds in
 +// message time and iOS-like motion. Everything is stored locally and applied
@@ -6361,22 +6360,18 @@ index 0000000..9ff5484
 +
 +export function applyDeltagramPrefs() {
 +  const prefs = getDeltagramPrefs();
-+  const body = document.body;
-+  if (body) {
-+    // CSS zoom scales px and rem alike, so the whole Telegram layout grows.
-+    const zoom = prefs.uiScale === 100 ? '' : String(prefs.uiScale / 100);
-+    if (body.style.zoom !== zoom) {
-+      body.style.zoom = zoom;
-+      // Telegram Web measures the column widths in JS. A zoom change does not
-+      // fire `resize`, so without this the panels keep stale sizes and the
-+      // layout visibly shifts; notify after the new layout is committed.
-+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
-+      // Telegram Web also memoises column measurements; one more tick after
-+      // React commits the zoomed layout keeps menus and panels aligned.
-+      window.setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
-+    }
-+  }
 +  const root = document.documentElement;
++  // Scale the root font size instead of CSS `zoom`: Telegram Web positions
++  // context menus and popups with getBoundingClientRect() values, and a zoomed
++  // coordinate space multiplied them a second time (menus opened off-screen).
++  // Every layout metric in Web A is rem-based, and `REM` in mediaDimensions is
++  // derived from this font size, so the whole UI still grows proportionally.
++  const baseSize = Math.round(16 * (prefs.uiScale / 100));
++  if (root.style.fontSize !== `${baseSize}px`) {
++    root.style.fontSize = `${baseSize}px`;
++    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
++    window.setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
++  }
 +  root.style.setProperty('--border-radius-messages', `${prefs.bubbleRadius}px`);
 +  root.classList.toggle('dg-ios-motion', prefs.iosMotion);
 +  root.dataset.dgSeconds = prefs.seconds ? '1' : '0';
@@ -6400,6 +6395,11 @@ index 0000000..9ff5484
 +    return original(scaled);
 +  };
 +})();
++
++// Mutate the root font size as early as possible: mediaDimensions reads
++// getComputedStyle(documentElement).fontSize at import time and derives the
++// pixel REM constant from it.
++applyDeltagramPrefs();
 diff --git a/src/util/deltagram/registry.ts b/src/util/deltagram/registry.ts
 new file mode 100644
 index 0000000..8da6b59
