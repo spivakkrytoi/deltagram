@@ -152,7 +152,6 @@ import org.telegram.ui.LocationActivity;
 import org.telegram.ui.PhotoViewer;
 import org.telegram.ui.PremiumPreviewFragment;
 import org.telegram.ui.ProfileActivity;
-import org.telegram.ui.ProfileActivity2;
 import org.telegram.ui.ProfileStoriesCollectionTabs;
 import org.telegram.ui.SelectStoriesBottomSheet;
 import org.telegram.ui.Stars.StarsController;
@@ -848,22 +847,6 @@ public class SharedMediaLayout extends FrameLayout implements NotificationCenter
                 dialogId = mediaActivity.getDialogId();
             } else if (fragment instanceof DialogsActivity) {
                 dialogId = fragment.getUserConfig().getClientUserId();
-            } else if (fragment instanceof ProfileActivity2) {
-                final ProfileActivity2 profileActivity = (ProfileActivity2) fragment;
-                dialogId = profileActivity.getDialogId();
-                topicId = profileActivity.getTopicId();
-
-                if (dialogId != fragment.getUserConfig().getClientUserId()) {
-                    fragment.getMessagesController().getSavedMessagesController().hasSavedMessages(dialogId, hasMessages -> {
-                        this.hasSavedMessages = hasMessages;
-                        this.checkedHasSavedMessages = true;
-                        if (hasSavedMessages) {
-                            for (int a = 0, N = delegates.size(); a < N; a++) {
-                                delegates.get(a).mediaCountUpdated();
-                            }
-                        }
-                    });
-                }
             }
 
             if (mergeDialogId == 0 && DialogObject.isChatDialog(dialogId)) {

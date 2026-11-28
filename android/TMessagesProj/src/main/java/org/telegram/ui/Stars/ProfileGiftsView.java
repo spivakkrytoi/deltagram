@@ -162,6 +162,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
     public final class Gift {
 
+        public final TL_stars.SavedStarGift saved;
         public final long id;
         public final TLRPC.Document document;
         public final long documentId;
@@ -171,7 +172,9 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
 
         public int position = -1;
 
-        public Gift(TL_stars.TL_starGiftUnique gift) {
+        public Gift(TL_stars.SavedStarGift saved) {
+            this.saved = saved;
+            final TL_stars.TL_starGiftUnique gift = (TL_stars.TL_starGiftUnique) saved.gift;
             id = gift.id;
             document = gift.getDocument();
             documentId = document == null ? 0 : document.id;
@@ -182,6 +185,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
         }
 
         public Gift(TLRPC.TL_emojiStatusCollectible status) {
+            this.saved = null;
             id = status.collectible_id;
             document = null;
             documentId = status.document_id;
@@ -283,7 +287,7 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
             for (int i = 0; i < list.gifts.size(); i++) {
                 final TL_stars.SavedStarGift savedGift = list.gifts.get(i);
                 if (!savedGift.unsaved && savedGift.pinned_to_top && savedGift.gift instanceof TL_stars.TL_starGiftUnique) {
-                    final Gift gift = new Gift((TL_stars.TL_starGiftUnique) savedGift.gift);
+                    final Gift gift = new Gift(savedGift);
                     if (!giftIds.contains(gift.id)) {
                         gifts.add(gift);
                         giftIds.add(gift.id);
@@ -507,6 +511,15 @@ public class ProfileGiftsView extends View implements NotificationCenter.Notific
     }
 
     public void onGiftClick(Gift gift) {
+        if (gift.saved != null) {
+            // Open the in-app collectible sheet instead of sending the user to
+            // the public Telegram/Fragment NFT page, which does not exist for a
+            // DeltaGram gift.
+            new StarGiftSheet(getContext(), currentAccount, dialogId, resourcesProvider)
+                    .set(gift.saved, list)
+                    .show();
+            return;
+        }
         Browser.openUrl(getContext(), "https://t.me/nft/" + gift.slug);
     }
 }

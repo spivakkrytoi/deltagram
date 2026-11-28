@@ -60,6 +60,7 @@ public class DeltaGramSettingsActivity extends BaseFragment {
     private final int currentAccount = UserConfig.selectedAccount;
     private int page;
     private TextView lastValueView;
+    private TextView profileTabValueView;
 
     public DeltaGramSettingsActivity() {
         this(PAGE_MAIN);
@@ -138,6 +139,17 @@ public class DeltaGramSettingsActivity extends BaseFragment {
         footer.setGravity(Gravity.CENTER);
         footer.setPadding(0, dp(24), 0, dp(8));
         content.addView(footer);
+        if (page == PAGE_MAIN || page == PAGE_OTHER) {
+            TextView attribution = new TextView(context);
+            attribution.setText("Частина функцій DeltaGram основана на exteraGram · github.com/exteraSquad/exteraGram");
+            attribution.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText3));
+            attribution.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+            attribution.setGravity(Gravity.CENTER);
+            attribution.setPadding(dp(21), 0, dp(21), dp(12));
+            attribution.setOnClickListener(v ->
+                    Browser.openUrl(getParentActivity(), "https://github.com/exteraSquad/exteraGram"));
+            content.addView(attribution);
+        }
 
         return fragmentView;
     }
@@ -224,6 +236,18 @@ public class DeltaGramSettingsActivity extends BaseFragment {
 
     private void buildGeneral(LinearLayout content) {
         content.addView(section("Сообщения"));
+        addSwitch(content, "Фильтровать Zalgo",
+                "Скрывать чрезмерные диакритические знаки и управляющие символы направления в сообщениях",
+                prefs().getBoolean("delta_filter_zalgo", true), (view, checked) ->
+                        prefs().edit().putBoolean("delta_filter_zalgo", checked).apply());
+        addSwitch(content, "Показывать секунды",
+                "Отображать время сообщений с секундами",
+                prefs().getBoolean("delta_time_with_seconds", false), (view, checked) -> {
+                    prefs().edit().putBoolean("delta_time_with_seconds", checked).apply();
+                    LocaleController.getInstance().recreateFormatters();
+                    NotificationCenter.getInstance(currentAccount).postNotificationName(
+                            NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_ALL);
+                });
         addSwitch(content, "Сохранять удалённые сообщения",
                 "Сообщение, удалённое собеседником, остаётся в чате и в локальной базе",
                 SharedConfig.keepDeletedMessages, (view, checked) -> {
@@ -244,6 +268,11 @@ public class DeltaGramSettingsActivity extends BaseFragment {
                     SharedConfig.showIdAndDc = checked;
                     prefs().edit().putBoolean("deltagram_show_id", checked).apply();
                 });
+        // exteraGram General Preferences: choose the first profile media tab.
+        addChoice(content, "Вкладка профиля по умолчанию",
+                "Открывать медиа или общие группы вместо первой вкладки",
+                profileTabLabel(), R.drawable.msg_discussion, this::showProfileTabDialog);
+        profileTabValueView = lastValueView;
 
         content.addView(section("Числа и время"));
         addSwitch(content, "Не сокращать большие числа",
@@ -346,6 +375,9 @@ public class DeltaGramSettingsActivity extends BaseFragment {
         SharedConfig.hidePhoneNumber = false;
         SharedConfig.showIdAndDc = false;
         SharedConfig.disableNumberRounding = false;
+        prefs().edit().remove("delta_default_profile_tab").apply();
+        prefs().edit().remove("delta_filter_zalgo").apply();
+        prefs().edit().remove("delta_time_with_seconds").apply();
         SharedConfig.bubbleRadius = 22;
         SharedConfig.updateChatListSwipeSetting(SwipeGestureSettingsView.SWIPE_GESTURE_ARCHIVE);
         NotificationCenter.getInstance(currentAccount).postNotificationName(
@@ -377,6 +409,25 @@ public class DeltaGramSettingsActivity extends BaseFragment {
             if (lastValueView != null) {
                 lastValueView.setText(swipeActionLabel());
             }
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        builder.show();
+    }
+
+    private String profileTabLabel() {
+        switch (prefs().getInt("delta_default_profile_tab", 0)) {
+            case 1: return "Медиа";
+            case 2: return "Общие группы";
+            default: return "Стандартная";
+        }
+    }
+
+    private void showProfileTabDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), getResourceProvider());
+        builder.setTitle("Вкладка профиля по умолчанию");
+        builder.setItems(new CharSequence[]{"Стандартная", "Медиа", "Общие группы"}, (dialog, which) -> {
+            prefs().edit().putInt("delta_default_profile_tab", which).apply();
+            if (profileTabValueView != null) profileTabValueView.setText(profileTabLabel());
         });
         builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
         builder.show();

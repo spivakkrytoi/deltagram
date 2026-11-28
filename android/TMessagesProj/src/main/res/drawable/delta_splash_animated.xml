@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cherrygram's scale/fade animated splash adapted to DeltaGram artwork, API 31+. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector android:width="320dp" android:height="320dp"
+            android:viewportWidth="320" android:viewportHeight="320">
+            <group android:name="deltaIcon" android:pivotX="160" android:pivotY="160">
+                <path android:fillColor="#B51825"
+                    android:pathData="M160,65 A95,95 0,1 1,160 255 A95,95 0,1 1,160 65 Z"/>
+                <path android:fillColor="#FFFFFF"
+                    android:pathData="M119,107 L157,107 C193,107 216,128 216,160 C216,192 193,213 157,213 L119,213 Z M140,126 L140,194 L157,194 C181,194 195,181 195,160 C195,139 181,126 157,126 Z"
+                    android:fillType="evenOdd"/>
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="deltaIcon">
+        <aapt:attr name="android:animation">
+            <set android:ordering="together">
+                <objectAnimator android:propertyName="scaleX"
+                    android:duration="@integer/splash_screen_duration"
+                    android:valueFrom="0" android:valueTo="0.65"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in"/>
+                <objectAnimator android:propertyName="scaleY"
+                    android:duration="@integer/splash_screen_duration"
+                    android:valueFrom="0" android:valueTo="0.65"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in"/>
+                <objectAnimator android:propertyName="alpha"
+                    android:duration="@integer/splash_screen_duration"
+                    android:valueFrom="0" android:valueTo="1"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/fast_out_extra_slow_in"/>
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>

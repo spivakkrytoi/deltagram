@@ -32,7 +32,7 @@ public final class DeltagramVerifications {
     // These seven documents are seeded from the same WebP files on the server.
     // Render them locally in profile headers: a missing/stale custom-emoji
     // document cache must not make an assigned third-party badge invisible.
-    public static Drawable bundledIcon(Context context, long documentId) {
+    public static Drawable bundledIcon(Context context, long documentId, int sizePx) {
         String[] files = {"major", "business", "diamond", "crown", "star", "partner", "deltagram"};
         long index = documentId - 5310000000000000111L;
         if (context == null || index < 0 || index >= files.length) return null;
@@ -45,7 +45,21 @@ public final class DeltagramVerifications {
                 bundled[(int) index] = bitmap;
             }
             if (bitmap == null) return null;
-            return new BitmapDrawable(context.getResources(), bitmap);
+            // SwapAnimatedEmojiDrawable sizes non-animated drawables by their
+            // intrinsic width; the source artwork is 512px and would otherwise
+            // paint over the profile name.
+            final int iconSize = sizePx > 0 ? sizePx : AndroidUtilities.dp(17);
+            return new BitmapDrawable(context.getResources(), bitmap) {
+                @Override
+                public int getIntrinsicWidth() {
+                    return iconSize;
+                }
+
+                @Override
+                public int getIntrinsicHeight() {
+                    return iconSize;
+                }
+            };
         } catch (Exception ignored) {
             return null;
         }

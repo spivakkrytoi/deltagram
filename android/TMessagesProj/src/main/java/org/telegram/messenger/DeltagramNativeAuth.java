@@ -17,7 +17,7 @@ import java.security.SecureRandom;
  * server verifies the HMAC through the telesrv admin API and derives the user
  * from the authorization row; no user id is accepted from the client.
  */
-final class DeltagramNativeAuth {
+public final class DeltagramNativeAuth {
 
     private static final char[] HEX = "0123456789abcdef".toCharArray();
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -74,7 +74,7 @@ final class DeltagramNativeAuth {
         return new String(out);
     }
 
-    static boolean isAvailable(int account) {
+    public static boolean isAvailable(int account) {
         if (account < 0) {
             return false;
         }

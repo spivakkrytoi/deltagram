@@ -56,6 +56,7 @@ public:
     int32_t sendRequest(TLObject *object, onCompleteFunc onComplete, onQuickAckFunc onQuickAck, onRequestClearFunc onClear, uint32_t flags, uint32_t datacenterId, ConnectionType connectionType, bool immediate, int32_t requestToken);
     void cancelRequest(int32_t token, bool notifyServer, onRequestCancelDoneFunc onCancelled);
     void cleanUp(bool resetKeys, int32_t datacenterId);
+    void recoverSignedOutAuthKey(uint32_t datacenterId);
     void cancelRequestsForGuid(int32_t guid);
     void bindRequestToGuid(int32_t requestToken, int32_t guid);
     void applyDatacenterAddress(uint32_t datacenterId, std::string ipAddress, uint32_t port);
@@ -240,6 +241,7 @@ private:
     std::string currentConfigPath;
     std::string currentLogPath;
     int64_t currentUserId = 0;
+    bool recoveringSignedOutAuthKey = false;
     bool currentUserPremium = false;
     bool registeredForInternalPush = false;
     bool pushConnectionEnabled = true;

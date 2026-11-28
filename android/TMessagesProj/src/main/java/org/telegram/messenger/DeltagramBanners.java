@@ -41,6 +41,8 @@ public final class DeltagramBanners {
 
     private static final Object lock = new Object();
     private static final Map<Long, String> banners = new HashMap<>();
+    private static final Map<Long, String> pendingUploads = new HashMap<>();
+    private static final Map<Long, Long> pendingUploadTimes = new HashMap<>();
     private static final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>(8 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, Bitmap value) {
@@ -152,6 +154,8 @@ public final class DeltagramBanners {
         Bitmap bitmap = BitmapFactory.decodeByteArray(image, 0, image.length);
         synchronized (lock) {
             banners.put(userId, token);
+            pendingUploads.put(userId, token);
+            pendingUploadTimes.put(userId, System.currentTimeMillis());
             if (bitmap != null) cache.put(userId + ":" + url, bitmap);
         }
         refreshNow();
@@ -198,6 +202,20 @@ public final class DeltagramBanners {
                     }
                 }
                 synchronized (lock) {
+                    // A registry request started before the upload may return
+                    // after it and otherwise erase the newly visible cover.
+                    java.util.Iterator<Map.Entry<Long, String>> pending = pendingUploads.entrySet().iterator();
+                    while (pending.hasNext()) {
+                        Map.Entry<Long, String> entry = pending.next();
+                        Long uploadedAt = pendingUploadTimes.get(entry.getKey());
+                        if (entry.getValue().equals(next.get(entry.getKey()))
+                                || uploadedAt == null || System.currentTimeMillis() - uploadedAt > 2 * 60 * 1000L) {
+                            pending.remove();
+                            pendingUploadTimes.remove(entry.getKey());
+                        } else {
+                            next.put(entry.getKey(), entry.getValue());
+                        }
+                    }
                     banners.clear();
                     banners.putAll(next);
                 }

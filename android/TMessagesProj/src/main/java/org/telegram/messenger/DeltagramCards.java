@@ -315,6 +315,10 @@ public final class DeltagramCards {
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static void request(int account, String method, String path, byte[] body, String contentType, Parser parser, Callback callback) {
         final String authorization = DeltagramNativeAuth.authorization(account, method, path, body);
+        if (authorization == null) {
+            handler.post(() -> callback.onResult(null, "Не удалось подписать запрос: сессия ещё не готова"));
+            return;
+        }
         new Thread(() -> {
             JSONObject result = null;
             String error = null;

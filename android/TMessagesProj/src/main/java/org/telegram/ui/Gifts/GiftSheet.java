@@ -610,9 +610,17 @@ public class GiftSheet extends BottomSheetWithRecyclerListView implements Notifi
                                 openSendSheet.run();
                             } else if (res instanceof TL_stars.checkCanSendGiftResultFail) {
                                 final TL_stars.checkCanSendGiftResultFail fail = (TL_stars.checkCanSendGiftResultFail) res;
+                                // locked_until_date is an absolute Unix instant: format it with the
+                                // device timezone so a Moscow user sees 22:40 when Kyiv opens at 21:40.
+                                final String unlockAt = LocaleController.formatDateTime((long) gift.locked_until_date * 1000L, true);
+                                final CharSequence message = TextUtils.concat(
+                                    MessageObject.formatTextWithEntities(fail.reason, false),
+                                    "\n\n",
+                                    LocaleController.formatString(R.string.GiftLockedUntil, unlockAt)
+                                );
                                 final AlertDialog dialog = new AlertDialog.Builder(getContext(), resourcesProvider)
                                     .setTitle(getString(R.string.GiftLocked))
-                                    .setMessage(MessageObject.formatTextWithEntities(fail.reason, false))
+                                    .setMessage(message)
                                     .setPositiveButton(getString(R.string.OK), null)
                                     .show();
                                 final TextView textView = dialog.getMessageTextView();

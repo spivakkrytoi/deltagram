@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="DeltagramVerifiedGroup">Ця група верифікована</string>
+    <string name="DeltagramVerifiedChannel">Цей канал верифікований</string>
     <string name="AppName">Telegram</string>
     <string name="AppNameBeta">Telegram Beta</string>
     <string name="LanguageName">Українська</string>
@@ -277,4 +279,5 @@
     <string name="RemindDayAt">\'Нагадати\' d MMM\',\' HH:mm</string>
     <string name="RemindDayYearAt">\'Нагадати\' d MMM yyyy\',\' HH:mm</string>
     <string name="DeltaGramSetBanner">Встановити банер</string>
+    <string name="GiftLockedUntil">Доступно %1$s</string>
 </resources>

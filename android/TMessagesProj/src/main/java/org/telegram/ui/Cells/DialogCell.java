@@ -1504,7 +1504,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                             drawScam = 2;
                             Theme.dialogs_fakeDrawable.checkText();
                         } else {
-                            drawVerified = !forbidVerified && user.verified;
+                            drawVerified = !forbidVerified && !UserObject.isUserSelf(user) && user.verified;
                             drawBotVerified = !forbidVerified && !UserObject.isUserSelf(user) && user.bot_verification_icon != 0;
                         }
                         drawPremium = MessagesController.getInstance(currentAccount).isPremiumUser(user) && UserConfig.getInstance(currentAccount).clientUserId != user.id && user.id != 0;
@@ -5598,7 +5598,8 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
             }
         }
         if (drawVerified) {
-            sb.append(getString(R.string.AccDescrVerified));
+            sb.append(getString(chat == null ? R.string.AccDescrVerified : chat.megagroup
+                    ? R.string.DeltagramVerifiedGroup : R.string.DeltagramVerifiedChannel));
             sb.append(". ");
         }
         if (dialogMuted) {

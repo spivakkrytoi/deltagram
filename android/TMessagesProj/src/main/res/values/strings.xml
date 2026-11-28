@@ -5167,6 +5167,8 @@
     <string name="AccDescrSendAsPeer">Send as %1$s</string>
     <string name="AccDescrBotMenu">Bot menu</string>
     <string name="AccDescrVerified">Verified</string>
+    <string name="DeltagramVerifiedGroup">This group is verified</string>
+    <string name="DeltagramVerifiedChannel">This channel is verified</string>
     <string name="AccDescrMentionCount_one">%1$d mention</string>
     <string name="AccDescrMentionCount_other">%1$d mentions</string>
     <string name="AccDescrUnreadCount_one">%1$d unread chat</string>
@@ -10309,6 +10311,7 @@
     <string name="GiftThemesSetByOther">**%1$s** set **%2$s** as a new theme for this chat.</string>
     <string name="GiftThemesSetActionView">View</string>
     <string name="GiftLocked">Gift Locked</string>
+    <string name="GiftLockedUntil">Available %1$s</string>
     <string name="Gift2UpgradeCostsInfo">See how this price will decrease ></string>
     <string name="Gift2UpgradeCostsTitle">Upgrade Cost</string>
     <string name="Gift2UpgradeCostsText">Users who upgrade their gift first get collectibles with shorter numbers.</string>

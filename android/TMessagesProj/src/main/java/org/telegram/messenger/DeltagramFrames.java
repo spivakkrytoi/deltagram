@@ -142,8 +142,12 @@ public final class DeltagramFrames {
         }
     }
 
-    private static RLottieDrawable animation(String kind) {
-        RLottieDrawable drawable = animations.get(kind);
+    private static RLottieDrawable animation(String kind, int pixels) {
+        // Share only equal-resolution renderers. A 192px bitmap stretched to a
+        // high-density profile header loses most of the ring's fine detail.
+        final int size = pixels <= 256 ? 256 : pixels <= 512 ? 512 : 1024;
+        final String cacheKey = kind + ":" + size;
+        RLottieDrawable drawable = animations.get(cacheKey);
         if (drawable != null) return drawable;
         if (!supported(kind)) return null;
         try (InputStream stream = ApplicationLoader.applicationContext.getAssets().open("avatar_frames/" + kind + ".json")) {
@@ -154,7 +158,9 @@ public final class DeltagramFrames {
             String json = buffer.toString("UTF-8");
             // The native Lottie renderer accepts JSON directly; no TGS decompression required.
             drawable = new RLottieDrawable(new File(ApplicationLoader.applicationContext.getCacheDir(), kind + ".json"),
-                    json, 192, 192, null, true, null, 0, false);
+                    json, size, size, null, false, null, 0, false);
+            drawable.setAutoRepeat(1);
+            drawable.setAutoRepeatCount(-1);
             drawable.setCallback(new android.graphics.drawable.Drawable.Callback() {
                 @Override public void invalidateDrawable(android.graphics.drawable.Drawable who) { invalidateViews(); }
                 @Override public void scheduleDrawable(android.graphics.drawable.Drawable who, Runnable what, long when) {
@@ -164,7 +170,7 @@ public final class DeltagramFrames {
                     handler.removeCallbacks(what);
                 }
             });
-            animations.put(kind, drawable);
+            animations.put(cacheKey, drawable);
             drawable.start();
             return drawable;
         } catch (Exception ignored) {
@@ -187,17 +193,26 @@ public final class DeltagramFrames {
     private static void paint(Canvas canvas, Rect bounds, String kind, View host) {
         if (canvas == null || bounds == null || bounds.width() < 12 || TextUtils.isEmpty(kind)) return;
         if (host != null) visibleViews.put(host, true);
-        RLottieDrawable drawable = animation(kind);
+        final boolean wideRing = "liquid_chrome_ring".equals(kind) || "holographic_glass_ring".equals(kind);
+        // fire/blue/green draw their hot rim at 296/512 of the canvas; chrome
+        // and glass at 224/512 radius. Scale that artwork so the ring's outer
+        // edge sits exactly on the avatar's edge instead of inside it.
+        final float scale = wideRing ? 1.14f : 1.74f;
+        final float side = Math.min(bounds.width(), bounds.height());
+        RLottieDrawable drawable = animation(kind, (int) Math.ceil(side * 1.85f));
         if (drawable == null) return;
         if (host != null && host.isAttachedToWindow() && !drawable.isRunning()) drawable.start();
-        // Artwork is inset inside its 512px Lottie canvas (the glass ring is
-        // only 406px wide). Expand about the avatar center to put the stroke
-        // over its perimeter instead of inside the portrait.
-        final float scale = "liquid_chrome_ring".equals(kind) ? 1.30f : 1.24f;
+        final float drawSide = side * scale;
         canvas.save();
-        canvas.scale(scale, scale, bounds.exactCenterX(), bounds.exactCenterY());
-        drawable.setBounds(bounds);
+        canvas.translate(bounds.exactCenterX() - drawSide / 2f, bounds.exactCenterY() - drawSide / 2f);
+        drawable.setBounds(0, 0, Math.round(drawSide), Math.round(drawSide));
         drawable.draw(canvas);
         canvas.restore();
+        // Profile avatars render the ring in dispatchDraw rather than through
+        // an ImageReceiver. Keep that host drawing while the animation runs;
+        // otherwise RLottie's no-draw timeout can pause a visible ring.
+        if (host != null && host.isShown() && host.isAttachedToWindow() && drawable.isRunning()) {
+            host.postInvalidateOnAnimation();
+        }
     }
 }

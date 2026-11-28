@@ -914,13 +914,30 @@ void Handshake::processHandshakeResponse_serverDHParamsAnswer(TLObject *message,
                     authKeyPendingMessageId = 0;
                     authKeyPendingRequestId = 0;
                     if (response != nullptr && typeid(*response) == typeid(TL_boolTrue)) {
+                        invalidBindRetries = 0;
                         if (LOGS_ENABLED) DEBUG_D("account%u dc%u handshake: bind completed", currentDatacenter->instanceNum, currentDatacenter->datacenterId);
                         ConnectionsManager::getInstance(currentDatacenter->instanceNum).scheduleTask([&] {
                             ByteArray *authKey = authKeyTempPending;
                             authKeyTempPending = nullptr;
                             delegate->onHandshakeComplete(this, authKeyTempPendingId, authKey, timeDifference);
                         });
-                    } else if (error == nullptr || error->code != 400 || error->text.find("ENCRYPTED_MESSAGE_INVALID") == std::string::npos) {
+                    } else if (error != nullptr && error->code == 400 && error->text.find("ENCRYPTED_MESSAGE_INVALID") != std::string::npos) {
+                        // Rebuild the pending temporary key and its encrypted
+                        // proof; never discard the permanent login on this
+                        // error. Bound retries avoid a hot handshake loop when
+                        // the server rejects every attempt.
+                        if (++invalidBindRetries <= 3) {
+                            ConnectionsManager::getInstance(currentDatacenter->instanceNum).scheduleTask([&] {
+                                beginHandshake(true);
+                            });
+                        } else {
+                            // Only a signed-out account may still hold a key
+                            // from the old DC route. A logged-in account keeps
+                            // its permanent authorization intact.
+                            ConnectionsManager::getInstance(currentDatacenter->instanceNum)
+                                    .recoverSignedOutAuthKey(currentDatacenter->datacenterId);
+                        }
+                    } else {
                         ConnectionsManager::getInstance(currentDatacenter->instanceNum).scheduleTask([&] {
                             beginHandshake(true);
                         });

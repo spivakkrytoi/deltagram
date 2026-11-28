@@ -58,6 +58,7 @@ private:
     int64_t authKeyTempPendingId = 0;
     int32_t authKeyPendingRequestId = 0;
     int64_t authKeyPendingMessageId = 0;
+    uint8_t invalidBindRetries = 0;
     bool needResendData = false;
 
     void sendRequestData(TLObject *object, bool important);

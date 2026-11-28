@@ -24,6 +24,7 @@ import static org.telegram.ui.bots.AffiliateProgramFragment.percents;
 import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.provider.MediaStore;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
@@ -146,6 +147,7 @@ import org.telegram.messenger.DocumentObject;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.DeltagramBanners;
+import org.telegram.messenger.DeltagramNativeAuth;
 import org.telegram.messenger.DeltagramCards;
 import org.telegram.messenger.DeltagramVerifications;
 import org.telegram.ui.Wallet.DeltamentPublicCardSheet;
@@ -3758,6 +3760,16 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         } else if (users != null) {
             initialTab = SharedMediaLayout.TAB_GROUPUSERS;
         }
+        if (initialTab == -1 && userId != 0 && currentChat == null) {
+            // Ported from exteraGram's DefaultProfileTab preference. Explicit
+            // deep links (gifts, common chats, similar peers) retain priority.
+            int preferredTab = MessagesController.getGlobalMainSettings().getInt("delta_default_profile_tab", 0);
+            if (preferredTab == 1) {
+                initialTab = SharedMediaLayout.TAB_PHOTOVIDEO;
+            } else if (preferredTab == 2) {
+                initialTab = SharedMediaLayout.TAB_COMMON_GROUPS;
+            }
+        }
         sharedMediaLayout = new SharedMediaLayout(context, did, sharedMediaPreloader, userInfo != null ? userInfo.common_chats_count : 0, sortedUsers, chatInfo, userInfo, initialTab, initialStoryAlbum, this, this, SharedMediaLayout.VIEW_TYPE_PROFILE_ACTIVITY, resourcesProvider, iBlur3FactoryLiquidGlass) {
             @Override
             protected int processColor(int color) {
@@ -5424,10 +5436,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
             @Override
             protected void dispatchDraw(Canvas canvas) {
-                super.dispatchDraw(canvas);
-                if (animatedEmojiDrawable != null && animatedEmojiDrawable.getImageReceiver() != null) {
-                    animatedEmojiDrawable.getImageReceiver().startAnimation();
-                }
+                // Paint the ring behind the avatar image so the artwork's
+                // center/glow never covers the photo; only the outer ring shows.
                 if (userId != 0 && currentChat == null) {
                     Rect frameBounds = AndroidUtilities.rectTmp2;
                     frameBounds.set(
@@ -5436,6 +5446,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                             (int) getImageReceiver().getImageX2(),
                             (int) getImageReceiver().getImageY2());
                     org.telegram.messenger.DeltagramFrames.paint(canvas, frameBounds, userId, this);
+                }
+                super.dispatchDraw(canvas);
+                if (animatedEmojiDrawable != null && animatedEmojiDrawable.getImageReceiver() != null) {
+                    animatedEmojiDrawable.getImageReceiver().startAnimation();
                 }
             }
         };
@@ -11293,7 +11307,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             }
         }
         if (icon != 0) {
-            Drawable bundled = DeltagramVerifications.bundledIcon(getContext(), icon);
+            Drawable bundled = DeltagramVerifications.bundledIcon(getContext(), icon, AndroidUtilities.dp(17));
             if (bundled != null) {
                 botVerificationDrawable[a].set(bundled, animated);
             } else {
@@ -11364,7 +11378,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 emojiStatusDrawable[a].setColor(color);
             }
             if (botVerificationDrawable[a] != null) {
-                botVerificationDrawable[a].setColor(ColorUtils.blendARGB(ColorUtils.blendARGB(fromColor, 0x99ffffff, progress), getThemedColor(Theme.key_player_actionBarTitle), mediaHeaderAnimationProgress));
+                // Third-party badges are full-colour artwork, not monochrome
+                // emoji-status masks. Tinting their bitmap erased the artwork.
+                botVerificationDrawable[a].setColor(null);
             }
             if (a == 1) {
                 animatedStatusView.setColor(color);
@@ -11982,7 +11998,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         nameTextViewRightDrawableContentDescription = LocaleController.getString(R.string.ScamMessage);
                     } else if (chat.verified) {
                         nameTextView[a].setRightDrawable2(getVerifiedCrossfadeDrawable(a));
-                        nameTextViewRightDrawableContentDescription = LocaleController.getString(R.string.AccDescrVerified);
+                        nameTextViewRightDrawableContentDescription = LocaleController.getString(chat.megagroup
+                                ? R.string.DeltagramVerifiedGroup : R.string.DeltagramVerifiedChannel);
                     } else {
                         nameTextView[a].setRightDrawable2(null);
                         nameTextViewRightDrawableContentDescription = null;
@@ -13166,8 +13183,10 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
 
     private void pickBanner() {
         if (getParentActivity() == null) return;
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        // Prefer the system gallery picker. Unlike GET_CONTENT providers, the
+        // MediaStore picker returns a stable content:// URI with a read grant
+        // that openInputStream can always consume.
+        Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
         intent.setType("image/*");
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         try {
@@ -13176,6 +13195,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             FileLog.e(e);
             try {
                 Intent fallback = new Intent(Intent.ACTION_GET_CONTENT);
+                fallback.addCategory(Intent.CATEGORY_OPENABLE);
                 fallback.setType("image/*");
                 fallback.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 startActivityForResult(Intent.createChooser(fallback, LocaleController.getString(R.string.DeltaGramSetBanner)), 5002);
@@ -13187,24 +13207,44 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void uploadBanner(Uri uri) {
-        if (uri == null || getParentActivity() == null) return;
-        try (java.io.InputStream is = getParentActivity().getContentResolver().openInputStream(uri)) {
+        if (uri == null) return;
+        if (!DeltagramNativeAuth.isAvailable(currentAccount)) {
+            BulletinFactory.of(this).createErrorBulletin("Сессия ещё не готова. Перезайдите в аккаунт.").show();
+            return;
+        }
+        android.content.ContentResolver resolver = ApplicationLoader.applicationContext.getContentResolver();
+        new Thread(() -> {
+        try {
+            // Some document providers refuse a second openInputStream for the
+            // same URI. Read the photo once and decode both passes from memory.
+            byte[] source;
+            try (java.io.InputStream is = resolver.openInputStream(uri)) {
+                if (is == null) throw new IllegalArgumentException("Не удалось открыть изображение");
+                java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+                byte[] chunk = new byte[16 * 1024];
+                int read;
+                while ((read = is.read(chunk)) > 0) {
+                    buffer.write(chunk, 0, read);
+                    if (buffer.size() > 24 * 1024 * 1024) {
+                        throw new IllegalArgumentException("Фото слишком большое");
+                    }
+                }
+                source = buffer.toByteArray();
+            }
             BitmapFactory.Options bounds = new BitmapFactory.Options();
             bounds.inJustDecodeBounds = true;
-            BitmapFactory.decodeStream(is, null, bounds);
-            if (is != null) is.close();
+            BitmapFactory.decodeByteArray(source, 0, source.length, bounds);
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                throw new IllegalArgumentException("Не удалось прочитать изображение");
+            }
             int sample = 1;
             int maxSide = Math.max(bounds.outWidth, bounds.outHeight);
             while (maxSide / sample > 1600) sample *= 2;
             BitmapFactory.Options opts = new BitmapFactory.Options();
             opts.inSampleSize = Math.max(1, sample);
-            Bitmap bitmap;
-            try (java.io.InputStream is2 = getParentActivity().getContentResolver().openInputStream(uri)) {
-                bitmap = BitmapFactory.decodeStream(is2, null, opts);
-            }
+            Bitmap bitmap = BitmapFactory.decodeByteArray(source, 0, source.length, opts);
             if (bitmap == null) {
-                BulletinFactory.of(this).createErrorBulletin("Не удалось прочитать изображение").show();
-                return;
+                throw new IllegalArgumentException("Не удалось прочитать изображение");
             }
             // Crop to the profile banner cover ratio before upload. Without this
             // a tall photo is scaled by width and appears extremely zoomed in.
@@ -13225,7 +13265,16 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             bitmap.compress(Bitmap.CompressFormat.JPEG, 86, out);
             byte[] bytes = out.toByteArray();
             bitmap.recycle();
+            if (bytes.length >= 3 * 1024 * 1024) {
+                AndroidUtilities.runOnUIThread(() -> {
+                    if (getParentActivity() != null) {
+                        BulletinFactory.of(this).createErrorBulletin("Фото слишком большое для баннера").show();
+                    }
+                });
+                return;
+            }
             DeltagramCards.uploadBanner(currentAccount, bytes, "image/jpeg", (token, error) -> {
+                if (getParentActivity() == null) return;
                 if (error != null || TextUtils.isEmpty(token)) {
                     BulletinFactory.of(this).createErrorBulletin(error != null ? error : "Баннер не сохранён").show();
                     return;
@@ -13238,8 +13287,13 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             });
         } catch (Exception e) {
             FileLog.e(e);
-            BulletinFactory.of(this).createErrorBulletin("Не удалось загрузить баннер").show();
+            AndroidUtilities.runOnUIThread(() -> {
+                if (getParentActivity() != null) {
+                    BulletinFactory.of(this).createErrorBulletin("Не удалось загрузить баннер").show();
+                }
+            });
         }
+        }, "DeltaGramBannerDecode").start();
     }
 
     @Override

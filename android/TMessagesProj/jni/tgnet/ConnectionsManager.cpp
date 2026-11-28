@@ -433,6 +433,17 @@ void ConnectionsManager::loadConfig() {
 
     initDatacenters();
 
+    // An upgraded client may carry Telegram's old DC2 address (or an old
+    // current DC) in tgnet.dat. Never send an unauthenticated DeltaGram login
+    // to that saved route. Keep the datacenter object and its auth keys: only
+    // repair the address and, for signed-out accounts, the routing DC.
+    if (!testBackend) {
+        if (currentUserId == 0 && currentDatacenterId != 2) {
+            currentDatacenterId = 2;
+        }
+        saveConfig();
+    }
+
     if ((!datacenters.empty() && currentDatacenterId == 0) || pushSessionId == 0) {
         if (pushSessionId == 0) {
             RAND_bytes((uint8_t *) &pushSessionId, 8);
@@ -694,6 +705,32 @@ void ConnectionsManager::cleanUp(bool resetKeys, int32_t datacenterId) {
             registeredForInternalPush = false;
         }
         saveConfig();
+    });
+}
+
+void ConnectionsManager::recoverSignedOutAuthKey(uint32_t datacenterId) {
+    // A persisted key from the old Telegram route cannot be bound on the
+    // DeltaGram server. Never reset a key belonging to an active account.
+    if (currentUserId != 0 || testBackend || datacenterId != 2 || recoveringSignedOutAuthKey) {
+        return;
+    }
+    recoveringSignedOutAuthKey = true;
+    scheduleTask([this, datacenterId] {
+        if (currentUserId != 0) {
+            recoveringSignedOutAuthKey = false;
+            return;
+        }
+        Datacenter *datacenter = getDatacenterWithId(datacenterId);
+        if (datacenter != nullptr) {
+            if (LOGS_ENABLED) DEBUG_E("dc%u resetting stale key for signed-out account", datacenterId);
+            datacenter->clearAuthKey(HandshakeTypeAll);
+            datacenter->recreateSessions(HandshakeTypeAll);
+            datacenter->authorized = false;
+            saveConfig();
+            datacenter->beginHandshake(HandshakeTypePerm, true);
+        } else {
+            recoveringSignedOutAuthKey = false;
+        }
     });
 }
 
@@ -1437,14 +1474,13 @@ void ConnectionsManager::processServerResponse(TLObject *message, int64_t messag
                                     request->startTimeMillis = 0;
                                     request->requestFlags |= RequestFlagResendAfter;
                                 } else if (error->error_message.find(bindFailed) != std::string::npos && typeid(*request->rawRequest) == typeid(TL_auth_bindTempAuthKey)) {
-                                    int datacenterId;
-                                    if (delegate != nullptr && getDatacenterWithId(DEFAULT_DATACENTER_ID) == datacenter) {
-                                        delegate->onLogout(instanceNum);
-                                        datacenterId = -1;
-                                    } else {
-                                        datacenterId = datacenter->getDatacenterId();
-                                    }
-                                    cleanUp(true, datacenterId);
+                                    // This error belongs to the pending temporary
+                                    // handshake, not to the user's permanent auth
+                                    // key. Handshake's completion callback can
+                                    // retry with a fresh temporary key. Wiping
+                                    // every key here logs out an otherwise valid
+                                    // account after a failed temp-key renewal.
+                                    if (LOGS_ENABLED) DEBUG_E("dc%u temporary auth-key binding failed; keeping permanent authorization", datacenter->getDatacenterId());
                                 }
                             }
                         }
@@ -1839,10 +1875,25 @@ void ConnectionsManager::initDatacenters() {
 
         if (datacenters.find(2) == datacenters.end()) {
             datacenter = new Datacenter(instanceNum, 2);
-            datacenter->addAddressAndPort("150.241.69.39", 2398, 0, "");
-            datacenter->addAddressAndPort("2001:67c:4e8:f002:0000:0000:0000:000a", 443, 1, "");
             datacenters[2] = datacenter;
+        } else {
+            datacenter = datacenters[2];
         }
+        // Replace a persisted Telegram DC2 endpoint without clearing the
+        // permanent authorization key or any live account state.
+        std::vector<TcpAddress> deltagramAddresses;
+        deltagramAddresses.emplace_back("150.241.69.39", 2398, 0, "");
+        datacenter->replaceAddresses(deltagramAddresses, 0);
+        std::vector<TcpAddress> noIpv6;
+        datacenter->replaceAddresses(noIpv6, TcpAddressFlagIpv6);
+        // Temporary and download endpoints from an older installation can
+        // otherwise win over the primary address during login handshakes.
+        std::vector<TcpAddress> noTemporaryAddresses;
+        datacenter->replaceAddresses(noTemporaryAddresses, TcpAddressFlagTemp);
+        std::vector<TcpAddress> noDownloadAddresses;
+        datacenter->replaceAddresses(noDownloadAddresses, TcpAddressFlagDownload);
+        std::vector<TcpAddress> noIpv6DownloadAddresses;
+        datacenter->replaceAddresses(noIpv6DownloadAddresses, TcpAddressFlagDownload | TcpAddressFlagIpv6);
 
         if (datacenters.find(3) == datacenters.end()) {
             datacenter = new Datacenter(instanceNum, 3);
@@ -2280,6 +2331,9 @@ void ConnectionsManager::receivedCaptchaResult(int32_t requestTokensCount, int32
 }
 
 void ConnectionsManager::onDatacenterHandshakeComplete(Datacenter *datacenter, HandshakeType type, int32_t timeDiff) {
+    if (type == HandshakeTypeTemp && datacenter->getDatacenterId() == 2) {
+        recoveringSignedOutAuthKey = false;
+    }
     saveConfig();
     uint32_t datacenterId = datacenter->getDatacenterId();
     if (datacenterId == currentDatacenterId || datacenterId == movingToDatacenterId || updatingDcSettingsWorkaround || updatingDcSettings) {

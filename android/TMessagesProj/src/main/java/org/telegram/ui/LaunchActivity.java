@@ -2284,7 +2284,13 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                                     }
                                     break;
                                 }
+                                case "deltagram":
                                 case "tg": {
+                                    // Route DeltaGram links through the same message resolver
+                                    // as tg://, without handing them to the Telegram app.
+                                    if ("deltagram".equals(scheme)) {
+                                        data = data.buildUpon().scheme("tg").build();
+                                    }
                                     String url = data.toString();
                                     if (url.startsWith("tg:premium_offer") || url.startsWith("tg://premium_offer")) {
                                         String finalUrl = url.replace("tg:premium_offer", "tg://premium_offer");
