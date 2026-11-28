@@ -1,0 +1,7 @@
+{
+  "name": "deltagram-gift-lab",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=20"},
+  "scripts": {"start": "node server.js", "test": "node --test"}
+}

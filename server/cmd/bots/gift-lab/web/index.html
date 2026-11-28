@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#1c1c1e">
+  <meta name="robots" content="noindex">
+  <title>Gift Lab · DeltaGram</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="./lottie.min.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+<main id="app">
+  <section id="list-view" class="view">
+    <header class="page-head">
+      <span class="eyebrow">DELTAGRAM · GIFT LAB</span>
+      <h1>Выпущенные<br><em>подарки.</em></h1>
+      <p>Выберите коллекцию, соберите превью и выдайте подарок получателю Gift Lab.</p>
+    </header>
+    <label class="search" for="search">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16.5 16.5 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="search" type="search" placeholder="Найти подарок" autocomplete="off">
+    </label>
+    <div id="gifts" class="glist" aria-live="polite"></div>
+    <div id="list-status" class="spinner"><span class="spinner__dot"></span><span>Загружаем каталог…</span></div>
+  </section>
+
+  <section id="detail-view" class="view" hidden>
+    <button id="back" class="back-link" type="button">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m14.5 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Все подарки
+    </button>
+    <div id="preview" class="preview">
+      <div id="preview-backdrop" class="preview__backdrop"></div>
+      <div id="preview-pattern" class="preview__pattern"></div>
+      <div id="preview-model" class="preview__model"></div>
+    </div>
+    <div class="gift-head">
+      <h2 id="detail-title" class="gift-head__title">Подарок</h2>
+      <p id="detail-meta" class="gift-head__meta"></p>
+    </div>
+    <div class="props-bar">
+      <button id="roll" class="roll-btn" type="button">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h3l2 10h10M9 7h11M17 4l3 3-3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Случайно
+      </button>
+    </div>
+    <div class="props">
+      <button class="props__row props__row--action" type="button" data-kind="backdrop">
+        <span class="props__label">Фон</span><span id="value-backdrop" class="props__value"></span><span class="props__chev">›</span>
+      </button>
+      <button class="props__row props__row--action" type="button" data-kind="model">
+        <span class="props__label">Модель</span><span id="value-model" class="props__value"></span><span class="props__chev">›</span>
+      </button>
+      <button class="props__row props__row--action" type="button" data-kind="pattern">
+        <span class="props__label">Символ</span><span id="value-pattern" class="props__value"></span><span class="props__chev">›</span>
+      </button>
+    </div>
+    <p id="detail-hint" class="hint-bar hint-bar--plain"></p>
+  </section>
+
+  <section id="done-view" class="view" hidden>
+    <div class="done">
+      <div class="done__icon">
+        <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2 class="message__title">Подарок выдан</h2>
+      <p id="done-text" class="message__text"></p>
+      <button id="done-more" class="btn btn--ghost" type="button">Выдать ещё</button>
+      <button id="done-list" class="link-button" type="button">К списку подарков</button>
+    </div>
+  </section>
+
+  <div id="cta" class="cta" hidden>
+    <div class="cta__inner">
+      <div id="issue-status" class="status status--hint"><span class="status__text">Проверяем коллекцию…</span></div>
+      <button id="issue" class="btn btn--cta" type="button" disabled>Выдать подарок</button>
+    </div>
+  </div>
+</main>
+
+<div id="sheet" class="sheet-overlay" hidden>
+  <div class="sheet">
+    <div class="sheet__grip"></div>
+    <div class="sheet__head"><h3 id="sheet-title" class="sheet__title">Выбор</h3></div>
+    <label class="search sheet__search" for="sheet-search">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16.5 16.5 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="sheet-search" type="search" placeholder="Поиск" autocomplete="off">
+    </label>
+    <div class="sheet__content"><ul id="attr-list" class="attr__list"></ul></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
