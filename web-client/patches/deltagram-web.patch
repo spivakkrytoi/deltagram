@@ -5750,7 +5750,7 @@ index 616f613..1040559 100644
  };
 diff --git a/src/components/common/DeltagramAvatarFrame.scss b/src/components/common/DeltagramAvatarFrame.scss
 new file mode 100644
-index 0000000..9c68bc1
+index 0000000..5969131
 --- /dev/null
 +++ b/src/components/common/DeltagramAvatarFrame.scss
 @@ -0,0 +1,75 @@
@@ -5760,9 +5760,9 @@ index 0000000..9c68bc1
 +
 +.dg-avatar-frame {
 +  position: absolute;
-+  z-index: 3;
-+  inset: -4%;
-+  padding: 8%;
++  z-index: 4;
++  inset: 0;
++  padding: 7%;
 +  border-radius: 50%;
 +  pointer-events: none;
 +
@@ -6133,17 +6133,18 @@ index bc79c6a..302b790 100644
      shouldKeepLockScreenBackground: true,
    },
 diff --git a/src/index.tsx b/src/index.tsx
-index e41e6a4..7a4467a 100644
+index e41e6a4..742ea12 100644
 --- a/src/index.tsx
 +++ b/src/index.tsx
-@@ -1,5 +1,6 @@
+@@ -1,5 +1,7 @@
  /* eslint-disable simple-import-sort/imports -- Sanitize and claim URL login before other startup modules */
  import { getPendingWebLogin } from './util/routing';
 +import { applyDeltagramPrefs } from './util/deltagram/prefs';
++import { prefetchDeltagramRegistries } from './util/deltagram/registry';
  import { webLoginHandoffPromise } from './util/webLoginHandoff';
  import './util/handleError';
  import './util/setupServiceWorker';
-@@ -39,6 +40,7 @@ import App from './components/App';
+@@ -39,6 +41,7 @@ import App from './components/App';
  
  import './assets/fonts/roboto.css';
  import './styles/index.scss';
@@ -6151,14 +6152,16 @@ index e41e6a4..7a4467a 100644
  
  if (STRICTERDOM_ENABLED) {
    enableStrict();
-@@ -75,6 +77,7 @@ async function init() {
+@@ -75,7 +78,9 @@ async function init() {
      }
    });
  
 +  applyDeltagramPrefs();
    await initGlobal();
++  prefetchDeltagramRegistries();
    getActions().init();
  
+   initAutolock();
 diff --git a/src/lib/gramjs/crypto/RSA.ts b/src/lib/gramjs/crypto/RSA.ts
 index d237c49..db790aa 100644
 --- a/src/lib/gramjs/crypto/RSA.ts
@@ -6241,10 +6244,10 @@ index 9df8439..00fed17 100644
    connect(port: number, ip: string, isTestServer = false, isPremium = false) {
 diff --git a/src/styles/deltagram.scss b/src/styles/deltagram.scss
 new file mode 100644
-index 0000000..c08a9cf
+index 0000000..d013c4c
 --- /dev/null
 +++ b/src/styles/deltagram.scss
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,36 @@
 +// DeltaGram visual extras toggled from Settings → DeltaGram.
 +
 +html.dg-ios-motion {
@@ -6263,10 +6266,22 @@ index 0000000..c08a9cf
 +  }
 +
 +  .Menu,
++  .MenuPortal,
 +  .Modal,
-+  .Island {
-+    -webkit-backdrop-filter: blur(1.125rem) saturate(1.35);
-+    backdrop-filter: blur(1.125rem) saturate(1.35);
++  #LeftColumn,
++  .MiddleHeader,
++  #RightColumn {
++    background-color: color-mix(in srgb, var(--color-background) 72%, transparent);
++
++    -webkit-backdrop-filter: blur(1.5rem) saturate(1.6);
++    backdrop-filter: blur(1.5rem) saturate(1.6);
++  }
++
++  .Menu,
++  .Modal {
++    box-shadow:
++      0 1.5rem 3rem rgba(0, 0, 0, 0.35),
++      inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 +  }
 +}
 diff --git a/src/types/index.ts b/src/types/index.ts
@@ -6283,10 +6298,10 @@ index a9a430d..2693eca 100644
  export type StickerSetOrReactionsSetOrRecent = Pick<ApiStickerSet, (
 diff --git a/src/util/deltagram/prefs.ts b/src/util/deltagram/prefs.ts
 new file mode 100644
-index 0000000..95472b4
+index 0000000..9ff5484
 --- /dev/null
 +++ b/src/util/deltagram/prefs.ts
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,98 @@
 +// DeltaGram web preferences. These mirror the most visible options of the
 +// Android DeltaGram settings: interface scale, bubble radius, seconds in
 +// message time and iOS-like motion. Everything is stored locally and applied
@@ -6322,8 +6337,11 @@ index 0000000..95472b4
 +  return cached;
 +}
 +
++let reloadTimer: number | undefined;
++
 +export function setDeltagramPrefs(patch: Partial<DeltagramPrefs>) {
-+  cached = { ...getDeltagramPrefs(), ...patch };
++  const previous = getDeltagramPrefs();
++  cached = { ...previous, ...patch };
 +  try {
 +    localStorage.setItem(STORAGE_KEY, JSON.stringify(cached));
 +  } catch {
@@ -6331,6 +6349,14 @@ index 0000000..95472b4
 +  }
 +  applyDeltagramPrefs();
 +  window.dispatchEvent(new CustomEvent('deltagram:prefs'));
++
++  // Telegram Web snapshots its responsive breakpoints at boot (matchMedia) and
++  // keeps column measurements in module state. Reloading after a scale change
++  // rebuilds them against the new scale; other options apply live.
++  if (cached && previous.uiScale !== cached.uiScale) {
++    window.clearTimeout(reloadTimer);
++    reloadTimer = window.setTimeout(() => window.location.reload(), 700);
++  }
 +}
 +
 +export function applyDeltagramPrefs() {
@@ -6338,7 +6364,17 @@ index 0000000..95472b4
 +  const body = document.body;
 +  if (body) {
 +    // CSS zoom scales px and rem alike, so the whole Telegram layout grows.
-+    body.style.zoom = prefs.uiScale === 100 ? '' : String(prefs.uiScale / 100);
++    const zoom = prefs.uiScale === 100 ? '' : String(prefs.uiScale / 100);
++    if (body.style.zoom !== zoom) {
++      body.style.zoom = zoom;
++      // Telegram Web measures the column widths in JS. A zoom change does not
++      // fire `resize`, so without this the panels keep stale sizes and the
++      // layout visibly shifts; notify after the new layout is committed.
++      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
++      // Telegram Web also memoises column measurements; one more tick after
++      // React commits the zoomed layout keeps menus and panels aligned.
++      window.setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
++    }
 +  }
 +  const root = document.documentElement;
 +  root.style.setProperty('--border-radius-messages', `${prefs.bubbleRadius}px`);
@@ -6350,12 +6386,26 @@ index 0000000..95472b4
 +  window.addEventListener('deltagram:prefs', listener);
 +  return () => window.removeEventListener('deltagram:prefs', listener);
 +}
++
++// Scale the pixel-based responsive breakpoints with the interface scale, so a
++// 120 % layout collapses columns exactly like a browser zoom would. This must
++// run before Telegram Web initialises its media query cache.
++(function patchMatchMedia() {
++  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
++  const original = window.matchMedia.bind(window);
++  window.matchMedia = (query: string) => {
++    const scale = getDeltagramPrefs().uiScale / 100;
++    if (scale === 1) return original(query);
++    const scaled = query.replace(/(\d+(?:\.\d+)?)px/g, (_, n: string) => `${Math.round(Number(n) * scale)}px`);
++    return original(scaled);
++  };
++})();
 diff --git a/src/util/deltagram/registry.ts b/src/util/deltagram/registry.ts
 new file mode 100644
-index 0000000..a3b5611
+index 0000000..8da6b59
 --- /dev/null
 +++ b/src/util/deltagram/registry.ts
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,103 @@
 +// Public DeltaGram registries: avatar frames (`/api/frames/registry`) and
 +// profile banners (`/api/banners/registry`). Both are served by the deltament
 +// backend on the same origin, so no CORS setup is needed.
@@ -6445,6 +6495,11 @@ index 0000000..a3b5611
 +  }, [userId, url, key]);
 +
 +  return value;
++}
++
++export function prefetchDeltagramRegistries() {
++  void ensure(frames, FRAMES_URL, 'frames');
++  void ensure(banners, BANNERS_URL, 'banners');
 +}
 +
 +export function useDeltagramFrame(userId?: string) {
