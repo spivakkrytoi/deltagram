@@ -10,7 +10,7 @@ HTTP-интерфейс для ботов DeltaGram, совместимый по
 изменений кода — достаточно заменить адрес сервера.
 
 <div class="docs-stats">
-  <a href="/methods"><b>33</b><span>метода</span></a>
+  <a href="/methods"><b>39</b><span>методов</span></a>
   <a href="/types"><b>20+</b><span>типов</span></a>
   <a href="/errors"><b>JSON</b><span>ошибки как в Telegram</span></a>
 </div>
