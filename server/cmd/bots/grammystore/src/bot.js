@@ -35,8 +35,7 @@ function positiveInteger(value, max = Number.MAX_SAFE_INTEGER) {
   const number = Number(value);
   return Number.isSafeInteger(number) && number > 0 && number <= max ? number : 0;
 }
-// Admin targets may be a numeric Telegram ID or a @telegram-username (exactly
-// as admin lookup accepts). Returns 0 when nothing can be resolved.
+// Non-admin product recipients may be Telegram IDs or bot-known usernames.
 async function resolveTelegramTarget(db, value) {
   const raw = String(value ?? "").trim();
   const telegramID = positiveInteger(raw);
@@ -45,10 +44,21 @@ async function resolveTelegramTarget(db, value) {
   const user = await db.userByUsername(raw);
   return user?.telegram_id && Number.isSafeInteger(user.telegram_id) ? user.telegram_id : 0;
 }
-async function parseModerationTarget(db, value) {
-  const [idRaw, stateRaw] = String(value ?? "").split(/\s+/);
-  const id = await resolveTelegramTarget(db, idRaw);
-  if (!id) throw new Error("invalid Telegram ID or username");
+function parseDeltaGramID(value) {
+  const raw = String(value ?? "");
+  return /^[1-9]\d*$/.test(raw) ? positiveInteger(raw) : 0;
+}
+async function adminTelegramTarget(db, value) {
+  const id = parseDeltaGramID(value);
+  if (!id) throw new Error("invalid DeltaGram ID");
+  const user = await db.userByServerUserID(id);
+  if (!user || Number(user.server_user_id) !== id) throw new Error("DeltaGram ID is not linked to a bot user");
+  return positiveInteger(user.telegram_id);
+}
+function parseModerationTarget(value) {
+  const [idRaw, stateRaw, extra] = String(value ?? "").trim().split(/\s+/);
+  const id = parseDeltaGramID(idRaw);
+  if (!id || extra) throw new Error("invalid DeltaGram ID or state");
   if (stateRaw === undefined || /^(1|on|yes|true)$/i.test(stateRaw)) return { id, on: true };
   if (/^(0|off|no|false)$/i.test(stateRaw)) return { id, on: false };
   throw new Error("invalid state: use on or off");
@@ -1321,38 +1331,10 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
       if (!isOwner(config, ctx.from.id)) return;
       if (pending.kind === "admin_lookup") {
         await db.clearPending(ctx.from.id);
-        const isPhone = /^\+/.test(input);
-        const isID = /^\d+$/.test(input);
-        const result = isPhone
-          ? await db.adminLookupByNumber(input)
-          : isID
-            ? await db.adminLookupByTelegramID(Number(input))
-            : await db.adminLookupByUsername(input.replace(/^@/, ""));
-        if (!result) return adminResult(tr(ctx.from.id, "adminLookupNotFound"));
-        const lines = [];
-        if (result.user) {
-          const u = result.user;
-          lines.push(`👤 <b>User</b>: <code>${u.telegram_id}</code> · @${escapeHTML(u.username || "—")} · lang=${u.language} · bonus=${u.bonus} · gramsrv_id=<code>${u.server_user_id}</code>`);
-        }
-        if (result.number) {
-          const n = result.number;
-          lines.push(`📱 <b>Number</b>: <code>${escapeHTML(n.display)}</code> · owner=<code>${n.owner_id}</code> · current=${n.is_current} · format=${n.format}`);
-        }
-        if (result.numbers) {
-          for (const n of result.numbers) lines.push(`📱 <b>Number</b>: <code>${escapeHTML(n.display)}</code> · current=${n.is_current} · format=${n.format}`);
-        }
-        if (result.verifiedPhone) {
-          lines.push(`📞 <b>Verified phone</b>: <code>${escapeHTML(result.verifiedPhone.phone)}</code>`);
-        }
-        const recent = await db.adminRecentActivity(result.user?.telegram_id || Number(input));
-        if (recent.sales.length || recent.refunds.length) lines.push(`\n🕘 <b>Recent</b>:`);
-        for (const sale of recent.sales.slice(0, 6)) {
-          lines.push(`🛒 <b>${escapeHTML(sale.title)}</b> · ${sale.stars_price} ⭐ · <code>${escapeHTML(sale.charge_id)}</code> · ${formatEpoch(sale.created_at)}`);
-        }
-        for (const refund of recent.refunds.slice(0, 6)) {
-          lines.push(`↩️ <b>${escapeHTML(refund.title || "Refund")}</b> · ${refund.stars_price ? `${refund.stars_price} ⭐ · ` : ""}<code>${escapeHTML(refund.charge_id)}</code> · ${formatEpoch(refund.refunded_at || refund.updated_at)}`);
-        }
-        return adminResult(tr(ctx.from.id, "adminLookupResult", { result: lines.join("\n") }));
+        if (!/^@?[a-zA-Z][a-zA-Z0-9_]{1,31}$/.test(input)) throw new Error("enter a DeltaGram @username");
+        const id = await gramsrv.resolveUserByUsername(input.replace(/^@/, ""));
+        if (!id) return adminResult(tr(ctx.from.id, "adminLookupNotFound"));
+        return adminResult(tr(ctx.from.id, "adminLookupResult", { result: `@${escapeHTML(input.replace(/^@/, ""))} → DeltaGram ID: <code>${id}</code>` }));
       }
       if (pending.kind === "admin_broadcast") {
         await db.clearPending(ctx.from.id);
@@ -1364,8 +1346,9 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
         return adminResult(tr(ctx.from.id, "broadcastDone", { ok, skipped: 0, failed }));
       }
       if (pending.kind === "admin_stars") {
-        const [id, amount] = input.split(/\s+/).map(Number);
-        if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(amount) || amount <= 0) throw new Error("invalid ID or amount");
+        const [idRaw, amountRaw, extra] = input.split(/\s+/);
+        const id = parseDeltaGramID(idRaw), amount = Number(amountRaw);
+        if (!id || extra || !Number.isSafeInteger(amount) || amount <= 0) throw new Error("invalid DeltaGram ID or amount");
         const actor = String(ctx.from.id);
         await gramsrv.grantStars(id, amount, "Telegram bot administrator grant", "", true, actor);
         await gramsrv.grantStars(id, amount, "Telegram bot administrator grant", pending.payload.operationID, false, actor);
@@ -1373,8 +1356,9 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
         return adminResult(tr(ctx.from.id, "starsGranted", { id, amount }));
       }
       if (pending.kind === "admin_premium") {
-        const [id, months] = input.split(/\s+/).map(Number);
-        if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(months) || months <= 0) throw new Error("invalid ID or months");
+        const [idRaw, monthsRaw, extra] = input.split(/\s+/);
+        const id = parseDeltaGramID(idRaw), months = Number(monthsRaw);
+        if (!id || extra || !Number.isSafeInteger(months) || months <= 0) throw new Error("invalid DeltaGram ID or months");
         const actor = String(ctx.from.id);
         await gramsrv.grantPremium(id, months, "Telegram bot administrator grant", "", true, actor);
         await gramsrv.grantPremium(id, months, "Telegram bot administrator grant", pending.payload.operationID, false, actor);
@@ -1401,21 +1385,21 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
       }
       if (pending.kind === "admin_invoice") {
         const [idRaw, starsRaw, ...words] = input.split(/\s+/);
-        const id = await resolveTelegramTarget(db, idRaw), stars = Number(starsRaw), title = words.join(" ").trim();
+        const id = await adminTelegramTarget(db, idRaw), stars = Number(starsRaw), title = words.join(" ").trim();
         if (!id || !Number.isSafeInteger(stars) || stars <= 0 || !title || title.length > 32) throw new Error("invalid invoice");
         const targetLanguage = languageOf(id);
         await bot.api.sendInvoice(id, title, translate(targetLanguage, "invoiceDescription", { title }), `custom|${Buffer.from(title).toString("base64url")}`, "XTR", [{ label: title, amount: stars }]);
         await db.clearPending(ctx.from.id); return adminResult(tr(ctx.from.id, "invoiceSent"));
       }
       if (pending.kind === "admin_access") {
-        const [phone, telegramRaw] = input.split(/\s+/); const telegramID = await resolveTelegramTarget(db, telegramRaw);
+        const [phone, telegramRaw] = input.split(/\s+/); const telegramID = await adminTelegramTarget(db, telegramRaw);
         if (!phone || !telegramID) throw new Error("invalid phone or Telegram ID or username");
         await db.grantCodeAccess(phone, telegramID); await db.clearPending(ctx.from.id);
         return adminResult(tr(ctx.from.id, "accessGranted", { phone: escapeHTML(phone), id: telegramID }));
       }
       if (pending.kind === "admin_bindphone") {
         const [idRaw, ...phoneParts] = input.split(/\s+/);
-        const targetID = await resolveTelegramTarget(db, idRaw); const phone = phoneParts.join("");
+        const targetID = await adminTelegramTarget(db, idRaw); const phone = phoneParts.join("");
         if (!targetID || !phone) throw new Error("invalid Telegram ID, @username, or phone");
         const user = await db.user(targetID);
         if (!user) return adminResult(tr(ctx.from.id, "userNotFound"));
@@ -1436,15 +1420,19 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
             await gramsrv.mintPhone(user.server_user_id, number.phone, `admin:bindphone:mint:${targetID}:${number.phone}:${Date.now()}`, false, actor);
           } catch (error) {
             console.error("Admin bind mint-phone failed", targetID, error);
-            return adminResult(tr(ctx.from.id, "bindPhonePartial", { phone: escapeHTML(number.display), id: targetID }));
+            return adminResult(tr(ctx.from.id, "bindPhonePartial", { phone: escapeHTML(number.display), id: idRaw }));
           }
         }
         await db.clearPending(ctx.from.id);
-        return adminResult(tr(ctx.from.id, "bindPhoneDone", { phone: escapeHTML(number.display), id: targetID }));
+        return adminResult(tr(ctx.from.id, "bindPhoneDone", { phone: escapeHTML(number.display), id: idRaw }));
       }
       if (pending.kind === "admin_revokenumber") {
-        const phone = input.replace(/[\s()-]/g, "");
+        const [idRaw, phoneRaw, extra] = input.split(/\s+/);
+        const id = parseDeltaGramID(idRaw);
+        const phone = String(phoneRaw ?? "").replace(/[()-]/g, "");
+        if (!id || extra) throw new Error("format: DELTAGRAM_ID +888NUMBER");
         if (!/^\+888[0-9]{3,12}$/.test(phone)) throw new Error("формат: +888XXXXXXXX");
+        if (await gramsrv.resolveUserByPhone(phone) !== id) throw new Error("number does not belong to DeltaGram ID");
         const actor = String(ctx.from.id);
         await gramsrv.revokePhone(phone, false, `admin:revokephone:${phone}`, true, actor);
         await gramsrv.revokePhone(phone, false, `admin:revokephone:${phone}`, false, actor);
@@ -1454,7 +1442,7 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
       }
       if (pending.kind === "admin_grantnumber") {
         const [idRaw, formatRaw] = input.split(/\s+/);
-        const targetID = await resolveTelegramTarget(db, idRaw);
+        const targetID = await adminTelegramTarget(db, idRaw);
         const format = formatRaw || "long";
         if (!targetID || !["short", "long"].includes(format)) throw new Error("формат: TELEGRAM_ID [short|long]");
         const user = await db.user(targetID);
@@ -1470,19 +1458,17 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
             await gramsrv.mintPhone(serverUserID, number.phone, `admin:grantnumber:mint:${targetID}:${number.phone}:${Date.now()}`, false, actor);
           } catch (error) {
             console.error("Admin anonymous number grant failed", targetID, error);
-            return adminResult(tr(ctx.from.id, "grantNumberPartial", { phone: escapeHTML(number.display), id: targetID }));
+            return adminResult(tr(ctx.from.id, "grantNumberPartial", { phone: escapeHTML(number.display), id: idRaw }));
           }
         }
         await db.clearPending(ctx.from.id);
-        return adminResult(tr(ctx.from.id, "grantNumberDone", { phone: escapeHTML(number.display), id: targetID }));
+        return adminResult(tr(ctx.from.id, "grantNumberDone", { phone: escapeHTML(number.display), id: idRaw }));
       }
       if (pending.kind === "admin_grantusername") {
         const [idRaw, ...words] = input.split(/\s+/);
-        const targetID = await resolveTelegramTarget(db, idRaw);
-        const username = normalizeUsername(words.join(""), 4);
-        if (!targetID || !username) throw new Error("invalid Telegram ID, @username, or username");
-        const serverUserID = await gramsrvUserIDOf(db, targetID);
-        if (!serverUserID) return adminResult(tr(ctx.from.id, "adminNoAccount", { id: targetID }));
+        const serverUserID = parseDeltaGramID(idRaw);
+        const username = normalizeUsername(words.join(""), 2);
+        if (!serverUserID || !username) throw new Error("invalid DeltaGram ID or username");
         // A server-side dry run is the authoritative occupation check before a
         // zero-price grant (blind even for vault names). The real mint rechecks
         // inside its own command, so a gang between the two calls cannot win;
@@ -1493,14 +1479,13 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
           throw error;
         });
         await mint(true, "");
-        await mint(false, `admin:grantusername:${targetID}:${username}:${Date.now()}`);
+        await mint(false, `admin:grantusername:${serverUserID}:${username}:${Date.now()}`);
         await db.clearPending(ctx.from.id);
-        return adminResult(tr(ctx.from.id, "grantUsernameDone", { username: escapeHTML(username), id: targetID }));
+        return adminResult(tr(ctx.from.id, "grantUsernameDone", { username: escapeHTML(username), id: idRaw }));
       }
       if (pending.kind === "admin_verified") {
-        const { id, on } = await parseModerationTarget(db, input);
-        const serverUserID = await gramsrvUserIDOf(db, id);
-        if (!serverUserID) return adminResult(tr(ctx.from.id, "adminNoAccount", { id }));
+        const { id, on } = parseModerationTarget(input);
+        const serverUserID = id;
         const actor = String(ctx.from.id);
         await gramsrv.setVerified(serverUserID, on, "Telegram bot administrator moderation", "", true, actor);
         await gramsrv.setVerified(serverUserID, on, "Telegram bot administrator moderation", `admin:verified:${id}:${Date.now()}`, false, actor);
@@ -1508,9 +1493,8 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
         return adminResult(tr(ctx.from.id, on ? "verifiedDone" : "verifiedRemoved", { id }));
       }
       if (pending.kind === "admin_freeze") {
-        const { id, on } = await parseModerationTarget(db, input);
-        const serverUserID = await gramsrvUserIDOf(db, id);
-        if (!serverUserID) return adminResult(tr(ctx.from.id, "adminNoAccount", { id }));
+        const { id, on } = parseModerationTarget(input);
+        const serverUserID = id;
         const actor = String(ctx.from.id);
         await gramsrv.setFrozen(serverUserID, on, "Telegram bot administrator moderation", "", true, actor);
         await gramsrv.setFrozen(serverUserID, on, "Telegram bot administrator moderation", `admin:freeze:${id}:${Date.now()}`, false, actor);
@@ -1518,9 +1502,8 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
         return adminResult(tr(ctx.from.id, on ? "frozenDone" : "unfrozenDone", { id }));
       }
       if (pending.kind === "admin_scam") {
-        const { id, on } = await parseModerationTarget(db, input);
-        const serverUserID = await gramsrvUserIDOf(db, id);
-        if (!serverUserID) return adminResult(tr(ctx.from.id, "adminNoAccount", { id }));
+        const { id, on } = parseModerationTarget(input);
+        const serverUserID = id;
         const actor = String(ctx.from.id);
         await gramsrv.setFlags(serverUserID, on, false, "Telegram bot administrator moderation", "", true, actor);
         await gramsrv.setFlags(serverUserID, on, false, "Telegram bot administrator moderation", `admin:scam:${id}:${Date.now()}`, false, actor);
@@ -1528,9 +1511,8 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
         return adminResult(tr(ctx.from.id, on ? "scamFlagDone" : "scamFlagRemoved", { id }));
       }
       if (pending.kind === "admin_fake") {
-        const { id, on } = await parseModerationTarget(db, input);
-        const serverUserID = await gramsrvUserIDOf(db, id);
-        if (!serverUserID) return adminResult(tr(ctx.from.id, "adminNoAccount", { id }));
+        const { id, on } = parseModerationTarget(input);
+        const serverUserID = id;
         const actor = String(ctx.from.id);
         await gramsrv.setFlags(serverUserID, false, on, "Telegram bot administrator moderation", "", true, actor);
         await gramsrv.setFlags(serverUserID, false, on, "Telegram bot administrator moderation", `admin:fake:${id}:${Date.now()}`, false, actor);
@@ -1539,10 +1521,9 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
       }
       if (pending.kind === "admin_refund") {
         const parts = input.split(/\s+/);
-        let expectedBuyerID, chargeID;
-        if (parts.length === 1) chargeID = parts[0];
-        else if (parts.length === 2) { expectedBuyerID = await resolveTelegramTarget(db, parts[0]); chargeID = parts[1]; }
-        else throw new Error("sale not found for this transaction ID");
+        if (parts.length !== 2) throw new Error("format: DELTAGRAM_ID TRANSACTION_ID");
+        const expectedBuyerID = await adminTelegramTarget(db, parts[0]);
+        const chargeID = parts[1];
         if (!chargeID) throw new Error("sale not found for this transaction ID");
         const sale = await db.refundTargetByCharge(chargeID);
         if (!sale) throw new Error("sale not found for this transaction ID");
@@ -1648,7 +1629,7 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
           const line = rawLine.trim();
           if (!line) continue;
           const parts = line.split(/[\s,;]+/).filter(Boolean);
-          const accountID = Number(parts[0]);
+          const accountID = parseDeltaGramID(parts[0]);
           const amount = Number(parts[1]);
           if (parts.length !== 2 || !Number.isSafeInteger(accountID) || accountID <= 0
             || !Number.isSafeInteger(amount) || amount <= 0 || amount > 1_000_000_000) {
@@ -1696,7 +1677,7 @@ export function createBot({ config, db, gramsrv, recurring = null }) {
       }
       if (pending.kind === "admin_recurring_delete") {
         const tokens = input.split(/[\s,;]+/).filter(Boolean);
-        const ids = tokens.map(Number);
+        const ids = tokens.map(parseDeltaGramID);
         if (!tokens.length || ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
           return adminResult(tr(ctx.from.id, "adminRecurringDeleteInvalid"));
         }

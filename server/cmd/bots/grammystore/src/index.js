@@ -8,6 +8,7 @@ import { normalizeLanguage, translate } from "./i18n.js";
 import { parseTelesrvDelivery, verifyTelesrvSignature } from "./otp.js";
 import { isRealMode } from "./real-number.js";
 import { describeProxy } from "./proxy.js";
+import { deliverWithRetry } from "./delivery-retry.js";
 import { RecurringStarsScheduler } from "./recurring.js";
 
 const config = loadConfig();
@@ -137,16 +138,21 @@ function loginCodeMessage(language, recipient, code) {
   return lines.join("\n");
 }
 
-async function deliverLoginCode(recipient, code, chatIDs) {
+async function deliverLoginCode(recipient, code, chatIDs, expiresAt) {
   let delivered = 0;
   for (const chatID of chatIDs) {
     try {
       const language = normalizeLanguage((await db.userByChatID(chatID))?.language, config.defaultLanguage);
-      const sent = await bot.api.sendMessage(chatID, loginCodeMessage(language, recipient, code), { parse_mode: "HTML" });
+      const sent = await deliverWithRetry(
+        () => bot.api.sendMessage(chatID, loginCodeMessage(language, recipient, code), { parse_mode: "HTML" }),
+        expiresAt,
+        { onRetry: attempt => console.warn("OTP Telegram transport retry", attempt) }
+      );
+      if (!sent) continue;
       if (sent?.message_id) setTimeout(() => bot.api.deleteMessage(chatID, sent.message_id).catch(() => {}), 120_000).unref?.();
       delivered++;
     }
-    catch (error) { console.error("OTP delivery failed", chatID, error); }
+    catch (error) { console.error("OTP delivery failed", error?.error_code ?? error?.name ?? "UNKNOWN"); }
   }
   if (!delivered) console.error("OTP delivery failed for all bound chats");
 }
@@ -164,7 +170,7 @@ const server = http.createServer((request, response) => {
       const { recipient, code, deliveryID, expiresAt, fingerprint } = parseTelesrvDelivery(raw, request.headers);
       db.acceptLoginCodeDelivery(deliveryID, fingerprint, recipient, code, expiresAt).then((delivery) => {
         json(response, 202, { accepted: true, message_id: `grammy:${deliveryID}` });
-        if (!delivery.duplicate) void deliverLoginCode(recipient, code, delivery.chatIDs).catch((error) => console.error("OTP dispatch failed", error));
+        if (!delivery.duplicate) void deliverLoginCode(recipient, code, delivery.chatIDs, expiresAt).catch((error) => console.error("OTP dispatch failed", error));
       }).catch((error) => {
         const conflict = error.message === "IDEMPOTENCY_CONFLICT";
         const retired = error.message === "NUMBER_RETIRED";

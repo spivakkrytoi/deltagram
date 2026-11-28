@@ -35,6 +35,7 @@ function mockDb() {
       return user;
     },
     user: async (id) => users.get(id) ?? null,
+    userByServerUserID: async (id) => [...users.values()].find((u) => u.server_user_id === id) ?? null,
     userByChatID: async (chatID) => { for (const u of users.values()) if (u.chat_id === chatID) return u; return null; },
     users: async () => [...users.values()],
     notificationRecipients: async () => [...users.values()].filter((u) => u.notifications === 1),
@@ -586,12 +587,13 @@ test("admin audit lists support ticket ratings", async () => {
 });
 
 test("admin lookup result shows the admin keyboard", async () => {
-  const { bot, calls, db, config } = fixture();
+  const { bot, calls, db, config, gramsrv } = fixture();
   config.ownerIDs.add(777);
   await db.upsertUser({ id: 10, first_name: "User", language_code: "ru" }, 10, "ru");
   await db.upsertUser({ id: 777, first_name: "Admin", language_code: "ru" }, 777, "ru");
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:lookup" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "10" }));
+  gramsrv.resolveUserByUsername = async () => 424242;
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "@someuser" }));
   const sent = calls.filter((call) => call.method === "sendMessage" && call.payload.chat_id === 777).at(-1);
   assert.ok(sent, "Lookup result should be sent");
   const labels = (sent.payload.reply_markup?.inline_keyboard ?? []).flat().map((b) => b.text).join("\n");
@@ -610,7 +612,7 @@ test("admin binds a phone to any telegram account and updates the server account
   gramsrv.setPhone = async (serverID, phone, _reason, _key, _dryRun, _actor) => { setPhoneCalls.push({ serverID, phone }); };
   gramsrv.mintPhone = async (serverID, phone, _key, dryRun, _actor) => { mintPhoneCalls.push({ serverID, phone, dryRun }); return {}; };
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:bindphone" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "10 +79991234567" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "424242 +79991234567" }));
   assert.deepEqual(setPhoneCalls.at(-1), { serverID: 424242, phone: "+79991234567" }, "admin binding replaces the server account phone");
   assert.equal(mintPhoneCalls.length, 2, "a dry-run registry check precedes the real collectible mint");
   assert.deepEqual(mintPhoneCalls.at(-1), { serverID: 424242, phone: "+79991234567", dryRun: false }, "the bound number is minted as a collectible phone for the gramsrv account");
@@ -834,14 +836,14 @@ test("admin can grant an NFT username next to the bind phone button", async () =
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:grantusername" }));
   const prompt = calls.filter((call) => call.method === "editMessageText").at(-1);
   assert.match(prompt.payload.text, /TELEGRAM_ID USERNAME|Формат:/);
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "10 Aaaa" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "1780243205 Ab" }));
   assert.equal(mints.length, 2, "a dry-run occupation check precedes the real zero-price mint");
   assert.equal(mints[0].dryRun, true);
   assert.ok(!mints[1].dryRun, "the real mint runs without the dry-run flag");
   assert.equal(mints[0].userID, 1780243205, "the mint targets the linked gramsrv account, not the Telegram id");
   assert.equal(mints[0].bid, 0);
-  assert.equal(mints[0].username, "aaaa", "4-character usernames are grantable by admins");
-  const done = calls.filter((call) => call.method === "sendMessage").find((call) => /aaaa/.test(call.payload.text) && /выдан|granted to/i.test(call.payload.text));
+  assert.equal(mints[0].username, "ab", "two-character usernames are grantable by admins");
+  const done = calls.filter((call) => call.method === "sendMessage").find((call) => /\bab\b/.test(call.payload.text) && /выдан|granted to/i.test(call.payload.text));
   assert.ok(done, "the admin sees the grant confirmation");
 });
 
@@ -863,7 +865,7 @@ test("admin grant refuses an occupied NFT username without minting", async () =>
     return {};
   };
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:grantusername" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "10 @Durov" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "1780243205 @Durov" }));
   assert.equal(called, 1, "the real mint is skipped when the dry run reports occupation");
   const reply = calls.filter((call) => call.method === "sendMessage").at(-1);
   assert.match(reply.payload.text, /уже занят другим пользователем|already occupied by another user/i);
@@ -896,13 +898,13 @@ test("admin verified toggle dry-runs then applies and attributes the actor", asy
   const callsSeen = [];
   gramsrv.setVerified = async (...args) => callsSeen.push(args);
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:verified" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "424242" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "1780243205" }));
   assert.equal(callsSeen.length, 2, "a dry run precedes the real moderation command");
   assert.deepEqual(callsSeen[0], [1780243205, true, "Telegram bot administrator moderation", "", true, "777"], "the gramsrv account id is used, not the Telegram id");
   assert.equal(callsSeen[1][0], 1780243205);
   assert.equal(callsSeen[1][1], true);
   assert.equal(callsSeen[1][4], false, "the real call is not a dry run");
-  assert.equal(callsSeen[1][3].startsWith("admin:verified:424242:"), true, "the real call gets a deterministic idempotency key");
+  assert.equal(callsSeen[1][3].startsWith("admin:verified:1780243205:"), true, "the real call gets a deterministic idempotency key");
   assert.equal(callsSeen[1][5], "777", "the command is attributed to the admin Telegram ID");
   const reply = calls.filter((call) => call.method === "sendMessage").at(-1);
   assert.match(reply.payload.text, /верифицирован|verified/i);
@@ -918,7 +920,7 @@ test("admin can un-verify and pass an explicit off state", async () => {
   const callsSeen = [];
   gramsrv.setVerified = async (...args) => callsSeen.push(args);
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:verified" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "424242 off" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "1780243205 off" }));
   assert.deepEqual(callsSeen[1].slice(0, 2), [1780243205, false]);
   const reply = calls.filter((call) => call.method === "sendMessage").at(-1);
   assert.match(reply.payload.text, /снят бейдж верификации|verified badge was removed/i);
@@ -935,7 +937,7 @@ test("moderation buttons freeze, flag scam and flag fake via the gramsrv API", a
   gramsrv.setFrozen = async (...args) => frozen.push(args);
   gramsrv.setFlags = async (...args) => flagged.push(args);
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:freeze" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "424242" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "1780243205" }));
   assert.deepEqual(frozen.map((c) => c.slice(0, 2)), [[1780243205, true], [1780243205, true]]);
   assert.equal(frozen[0][4], true, "freeze dry-run before applying");
   assert.equal(frozen[1][5], "777");
@@ -943,32 +945,57 @@ test("moderation buttons freeze, flag scam and flag fake via the gramsrv API", a
   assert.match(freezeReply.payload.text, /заморожен|frozen/i);
 
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:scam" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "424242 on" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "1780243205 on" }));
   assert.deepEqual(flagged.at(-1).slice(0, 3), [1780243205, true, false], "scam sets the scam flag and leaves fake untouched");
 
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:fake" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "424242" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "1780243205" }));
   assert.deepEqual(flagged.at(-1).slice(0, 3), [1780243205, false, true], "fake sets the fake flag and leaves scam untouched");
   const fakeReply = calls.filter((call) => call.method === "sendMessage").at(-1);
   assert.match(fakeReply.payload.text, /фейк|fake/i);
 });
 
-test("admin lookup resolves an @username and shows the gramsrv account id", async () => {
-  const { bot, calls, db, config } = fixture();
+test("admin lookup resolves a two-letter DeltaGram @username using the server, not bot cache", async () => {
+  const { bot, calls, db, config, gramsrv } = fixture();
   config.ownerIDs.add(777);
   await db.upsertUser({ id: 777, first_name: "Admin", language_code: "ru" }, 777, "ru");
-  db.adminLookupByUsername = async () => ({
-    user: { telegram_id: 10, username: "durov", language: "ru", bonus: 0, server_user_id: 424242 },
-    numbers: [{ display: "+8880123456", is_current: true, format: "long" }],
-  });
+  gramsrv.resolveUserByUsername = async (name) => {
+    assert.equal(name, "ab");
+    return 424242;
+  };
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:lookup" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "@durov" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "@ab" }));
   const sent = calls.filter((call) => call.method === "sendMessage" && call.payload.chat_id === 777).at(-1);
-  assert.match(sent.payload.text, /@durov/, "the username is shown in the result");
-  assert.match(sent.payload.text, /gramsrv_id=<code>424242<\/code>/, "the gramsrv account id is displayed");
+  assert.match(sent.payload.text, /@ab/, "the username is shown in the result");
+  assert.match(sent.payload.text, /DeltaGram ID: <code>424242<\/code>/);
 });
 
-test("admin grant and moderation refuse a target without a linked gramsrv account", async () => {
+test("admin lookup refuses phone and Telegram ID without querying the server", async () => {
+  const { bot, calls, db, config, gramsrv } = fixture();
+  config.ownerIDs.add(777);
+  await db.upsertUser({ id: 777, first_name: "Admin", language_code: "ru" }, 777, "ru");
+  let queries = 0;
+  gramsrv.resolveUserByUsername = async () => { queries++; return 42; };
+  for (const input of ["+79991234567", "777"]) {
+    await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:lookup" }));
+    await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: input }));
+  }
+  assert.equal(queries, 0);
+});
+
+test("admin cannot revoke a phone belonging to a different DeltaGram ID", async () => {
+  const { bot, db, config, gramsrv } = fixture();
+  config.ownerIDs.add(777);
+  await db.upsertUser({ id: 777, first_name: "Admin", language_code: "ru" }, 777, "ru");
+  gramsrv.resolveUserByPhone = async () => 100;
+  let revoked = false;
+  gramsrv.revokePhone = async () => { revoked = true; };
+  await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:revokenumber" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "101 +8881234567" }));
+  assert.equal(revoked, false);
+});
+
+test("admin can grant and moderate by DeltaGram ID without a Telegram bot link", async () => {
   const { bot, calls, config, db, gramsrv } = fixture();
   config.ownerIDs.add(777);
   await db.upsertUser({ id: 777, first_name: "Admin", language_code: "ru" }, 777, "ru");
@@ -979,18 +1006,18 @@ test("admin grant and moderation refuse a target without a linked gramsrv accoun
 
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:grantusername" }));
   await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "10 abcd" }));
-  assert.equal(mints, 0, "no mint happens without a linked gramsrv account");
+  assert.equal(mints, 2, "a DeltaGram ID needs no Telegram bot link");
   const grantReply = calls.filter((call) => call.method === "sendMessage").at(-1);
-  assert.match(grantReply.payload.text, /нет привязанного аккаунта Gramsrv|no linked Gramsrv account/i);
+  assert.match(grantReply.payload.text, /выдан|granted/i);
 
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:verified" }));
   await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "10" }));
-  assert.equal(verifies, 0, "no moderation command runs without a linked gramsrv account");
+  assert.equal(verifies, 2, "moderation accepts DeltaGram IDs without a bot link");
   const modReply = calls.filter((call) => call.method === "sendMessage").at(-1);
-  assert.match(modReply.payload.text, /нет привязанного аккаунта Gramsrv|no linked Gramsrv account/i);
+  assert.match(modReply.payload.text, /верифицирован|verified/i);
 });
 
-test("admin TELEGRAM_ID operations accept an @telegram-username", async () => {
+test("admin operations reject @telegram-username and accept DeltaGram IDs", async () => {
   const { bot, calls, config, db, gramsrv } = fixture();
   config.ownerIDs.add(777);
   await db.upsertUser({ id: 777, first_name: "Admin", language_code: "ru" }, 777, "ru");
@@ -1001,12 +1028,15 @@ test("admin TELEGRAM_ID operations accept an @telegram-username", async () => {
   gramsrv.mintUsername = async (userID) => { mints.push(userID); return {}; };
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:grantusername" }));
   await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "@durov Aaaa" }));
-  assert.deepEqual(mints, [424242, 424242], "the @username resolved to the linked gramsrv account");
+  assert.deepEqual(mints, [], "a Telegram username cannot target the server");
   const verifies = [];
   gramsrv.setVerified = async (serverID) => { verifies.push(serverID); };
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:verified" }));
   await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "@durov on" }));
-  assert.deepEqual(verifies, [424242, 424242], "moderation accepts @username as the Telegram target");
+  assert.deepEqual(verifies, [], "moderation rejects @username");
+  await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:verified" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "424242 on" }));
+  assert.deepEqual(verifies, [424242, 424242]);
 });
 
 test("an occupied error on the real admin grant mint is surfaced to the moderator", async () => {
@@ -1027,7 +1057,7 @@ test("an occupied error on the real admin grant mint is surfaced to the moderato
     return {};
   };
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:grantusername" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "10 Ramble" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "424242 Ramble" }));
   assert.equal(realAttempts, 1, "a race gang is caught on the real mint attempt");
   const reply = calls.filter((call) => call.method === "sendMessage").at(-1);
   assert.match(reply.payload.text, /уже занят другим пользователем|already occupied by another user/i);
@@ -1046,7 +1076,7 @@ test("an unmapped gramsrv failure keeps the visible reason in the reply", async 
     throw error;
   };
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:grantusername" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "10 Ramble" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "424242 Ramble" }));
   const reply = calls.filter((call) => call.method === "sendMessage").at(-1);
   assert.match(reply.payload.text, /peer limit/i, "the raw gramsrv reason stays visible instead of a generic crash");
 });
@@ -1066,18 +1096,18 @@ test("admin audit button lists recent gramsrv actions", async () => {
   assert.match(sent.payload.text, /USERNAME_OCCUPIED/);
 });
 
-test("admin lookup shows recent sales and refunds for the user", async () => {
-  const { bot, calls, db, config } = fixture();
+test("admin lookup does not expose unrelated Telegram bot sales", async () => {
+  const { bot, calls, db, config, gramsrv } = fixture();
   config.ownerIDs.add(777);
   await db.upsertUser({ id: 777, first_name: "Admin", language_code: "ru" }, 777, "ru");
-  db.adminLookupByTelegramID = async () => ({ user: { telegram_id: 10, username: "durov", language: "ru", bonus: 0, server_user_id: 424242 }, numbers: [] });
+  gramsrv.resolveUserByUsername = async () => 424242;
   db.adminRecentActivity = async () => ({
     sales: [{ title: "20 Stars", stars_price: 20, charge_id: "charge-a", created_at: 1710000000 }],
     refunds: [{ title: "Premium — 1 month", stars_price: 30, charge_id: "charge-b", refunded_at: 1710001000 }],
   });
   await bot.handleUpdate(accountCallbackUpdate({ fromID: 777, chatID: 777, data: "admin:lookup" }));
-  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "10" }));
+  await bot.handleUpdate(textUpdate({ fromID: 777, chatID: 777, text: "@durov" }));
   const sent = calls.filter((call) => call.method === "sendMessage" && call.payload.chat_id === 777).at(-1);
-  assert.match(sent.payload.text, /🛒 <b>20 Stars<\/b> · 20 ⭐ · <code>charge-a<\/code>/);
-  assert.match(sent.payload.text, /↩️ <b>Premium — 1 month<\/b> · 30 ⭐ · <code>charge-b<\/code>/);
+  assert.match(sent.payload.text, /DeltaGram ID: <code>424242<\/code>/);
+  assert.doesNotMatch(sent.payload.text, /charge-a|charge-b/);
 });

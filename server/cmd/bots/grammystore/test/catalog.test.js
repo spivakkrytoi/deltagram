@@ -26,6 +26,9 @@ test("collectible username validation is canonical", () => {
   assert.equal(normalizeUsername("abcd", 4), "abcd", "admin grants may use 4-character usernames");
   assert.equal(normalizeUsername("abc", 4), "");
   assert.equal(normalizeUsername("4abc", 4), "");
+  assert.equal(normalizeUsername("@Ab", 2), "ab", "admin grants may use two-character usernames");
+  assert.equal(normalizeUsername("a", 2), "", "one-character usernames remain invalid");
+  assert.equal(normalizeUsername("ab"), "", "public shop minimum remains five characters");
   assert.equal(normalizeUsername("@A1b2_C3d4", 4), "a1b2_c3d4");
 });
 

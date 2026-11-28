@@ -91,6 +91,14 @@ export class GramsrvClient {
     throw new Error("invalid account lookup response");
   }
 
+  async resolveUserByUsername(username) {
+    const result = await this.post("/v1/accounts/resolve-by-username", { username });
+    if (result?.found === false && result.user_id === 0) return 0;
+    const id = Number(result?.user_id);
+    if (result?.found === true && Number.isSafeInteger(id) && id > 0) return id;
+    throw new Error("invalid account lookup response");
+  }
+
   grantPremium(userID, months, reason = "Telegram bot purchase", idempotencyKey = "", dryRun = false, actor = "") {
     const payload = this.command(reason, { user_id: userID, months }, idempotencyKey, actor);
     if (dryRun) payload.dry_run = true;

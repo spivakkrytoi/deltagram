@@ -27,6 +27,20 @@ test("resolveUserByPhone returns 0 when the account is missing", async () => {
   assert.equal(await client.resolveUserByPhone("+79990000000"), 0);
 });
 
+test("resolveUserByUsername queries DeltaGram and validates the response", async () => {
+  const client = new GramsrvClient({ gramsrvActor: "test" });
+  client.post = async (route, payload) => {
+    assert.equal(route, "/v1/accounts/resolve-by-username");
+    assert.deepEqual(payload, { username: "durov" });
+    return { found: true, user_id: 1780243207 };
+  };
+  assert.equal(await client.resolveUserByUsername("durov"), 1780243207);
+  client.post = async () => ({ found: false, user_id: 0 });
+  assert.equal(await client.resolveUserByUsername("missing"), 0);
+  client.post = async () => ({ found: true, user_id: 0 });
+  await assert.rejects(client.resolveUserByUsername("invalid"), /invalid account lookup response/);
+});
+
 test("admin grant mints a zero-price username with a dry-run flag and a deterministic key", async () => {
   const client = new GramsrvClient({ gramsrvActor: "test", publicBaseURL: "https://example.com" });
   const calls = [];
