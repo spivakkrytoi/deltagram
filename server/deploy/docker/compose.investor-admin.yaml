@@ -1,0 +1,5 @@
+services:
+  admin:
+    image: localhost/gramsrv-admin:investor-actions-fixed-20261124
+    environment:
+      INVESTOR_BRIDGE_KEY: ${INVESTOR_BRIDGE_KEY:?set INVESTOR_BRIDGE_KEY in deploy/docker/.env}

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#10090e">
+  <meta name="description" content="Приватное пространство инвестора DeltaGram">
+  <title>Инвестор — DeltaGram</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"><div class="aurora aurora-a"></div><div class="aurora aurora-b"></div><div class="grain"></div></div>
+  <div class="app">
+    <header class="topbar glass" data-glass>
+      <a class="brand" href="/investor/" aria-label="DeltaGram Инвестор — главная"><span class="symbol">✦</span><span>delta<span class="brand-gram">gram</span><span class="brand-divider">/</span><span class="brand-portal">инвестор</span></span></a>
+      <div class="top-actions"><span class="live-indicator"><i></i> ПРИВАТНЫЙ ДОСТУП</span><button type="button" class="ghost-button hidden" id="logout">Выйти <span aria-hidden="true">↗</span></button></div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow"><span class="eyebrow-line"></span> DELTAGRAM · ИНВЕСТОР</span>
+          <h1>Будущее ближе,<br><span>чем кажется.</span></h1>
+          <p>Особое пространство для тех, кто помогает создавать следующий DeltaGram. Всё важное — в одном месте. Всё лишнее — за его пределами.</p>
+          <div class="hero-actions"><a class="glass-button" href="#account" data-glass>Открыть пространство <span aria-hidden="true">↗</span></a><a class="subtle-link" href="#privileges">О привилегиях <span aria-hidden="true">↓</span></a></div>
+          <div class="hero-meta"><span>01 / 02</span><span>ВАШ УРОВЕНЬ — ИНВЕСТОР</span></div>
+        </div>
+        <div class="sculpture" aria-hidden="true"><div class="sculpture-haze"></div><div class="sculpture-ring ring-one"></div><div class="sculpture-ring ring-two"></div><div class="glass-core" data-glass><span class="core-light"></span><span class="core-letter">D</span><span class="core-star">✦</span></div><span class="sculpture-label">ОТКРЫВАЙТЕ БОЛЬШЕ</span></div>
+      </section>
+
+      <section class="privileges" id="privileges">
+        <div class="section-heading"><div><span class="eyebrow">01 / ВАШ СТАТУС</span><h2>Привилегии,<br><span>которые имеют значение.</span></h2></div><a class="source-link" href="deltagram://resolve?domain=dltagram&amp;post=88">Открыть объявление в DeltaGram <span aria-hidden="true">↗</span></a></div>
+        <div class="benefit-grid">
+          <article class="benefit hero-benefit glass" data-glass><div class="benefit-top"><span class="benefit-icon"><img src="./assets/telegram-star-user.png" alt="" width="30" height="30"></span><span class="benefit-no">01 / 03</span></div><div><strong class="benefit-amount">150 000 <small>в день</small></strong><h3>Звёзды</h3><p>Начисляйте звёзды на свой аккаунт в пределах дневного лимита.</p></div><span class="benefit-watermark" aria-hidden="true">✳</span></article>
+          <article class="benefit glass" data-glass><div class="benefit-top"><span class="benefit-icon"><img class="pepe-icon" src="./assets/plush-pepe-user.png" alt="" width="32" height="32"></span><span class="benefit-no">02 / 03</span></div><div><strong class="benefit-amount">07 <small>NFT</small></strong><h3>Коллекционные имена</h3><p>До семи свободных NFT-юзернеймов для вашего аккаунта.</p></div></article>
+          <article class="benefit glass" data-glass><div class="benefit-top"><span class="benefit-icon">✦</span><span class="benefit-no">03 / 03</span></div><div><strong class="benefit-amount medium">Знак.</strong><h3>Верификация</h3><p>Включайте и снимайте отметку своего аккаунта.</p></div></article>
+          <article class="benefit glass" data-glass><div class="benefit-top"><span class="benefit-icon">⌁</span><span class="benefit-no">ДОПОЛНИТЕЛЬНО</span></div><div><strong class="benefit-amount">+888</strong><h3>Короткий номер</h3><p>Привилегия инвестора. Управление пока доступно через администратора.</p></div></article>
+          <article class="benefit glass" data-glass><div class="benefit-top"><span class="benefit-icon">↗</span><span class="benefit-no">ДОПОЛНИТЕЛЬНО</span></div><div><strong class="benefit-amount">∞</strong><h3>Рейтинг</h3><p>Привилегия инвестора. Управление пока доступно через администратора.</p></div></article>
+        </div>
+      </section>
+
+      <section class="access" id="account">
+        <div class="access-copy"><span class="eyebrow">02 / ЛИЧНЫЙ КАБИНЕТ</span><h2>Только<br><span>для своих.</span></h2><p>Управляйте привилегиями своего аккаунта напрямую. Для входа нужен отдельный логин и пароль инвестора.</p><div class="security-chip glass" data-glass><span>⌁</span> Отдельный доступ · Только свой аккаунт</div></div>
+        <div class="access-card glass" data-glass>
+          <div id="login-view">
+            <div class="card-mark">✦</div><span class="eyebrow">ЛИЧНЫЙ ДОСТУП</span><h3>С возвращением.</h3><p class="card-lead">Войдите, чтобы управлять своими привилегиями.</p>
+            <form id="login-form">
+              <label for="login">Логин инвестора</label><input id="login" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="48" placeholder="Ваш логин" required>
+              <label for="password">Пароль</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Введите пароль" required>
+              <button class="primary-button" type="submit">Войти в кабинет <span aria-hidden="true">↗</span></button>
+            </form>
+            <p class="help">Нет доступа? Обратитесь к администратору DeltaGram.</p>
+          </div>
+          <div id="login-notice" class="notice hidden" role="status" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section id="account-view" class="workspace hidden" aria-label="Личный кабинет инвестора">
+        <aside class="workspace-sidebar glass">
+          <div class="workspace-sidebar-brand"><span class="symbol">✦</span><span><strong>DeltaGram</strong><small>Кабинет инвестора</small></span></div>
+          <p class="workspace-nav-label">ВАШИ ВОЗМОЖНОСТИ</p>
+          <nav class="workspace-nav" role="tablist" aria-label="Привилегии">
+            <button type="button" role="tab" id="tab-stars" aria-controls="pane-stars" aria-selected="true" data-tab="stars"><span aria-hidden="true"><img src="./assets/telegram-star-user.png" alt="" width="24" height="24"></span> Звёзды</button>
+            <button type="button" role="tab" id="tab-names" aria-controls="pane-names" aria-selected="false" data-tab="names"><span aria-hidden="true"><img class="pepe-icon" src="./assets/plush-pepe-user.png" alt="" width="24" height="24"></span> NFT-имена</button>
+            <button type="button" role="tab" id="tab-verified" aria-controls="pane-verified" aria-selected="false" data-tab="verified"><span aria-hidden="true">✦</span> Верификация</button>
+          </nav>
+          <div class="workspace-sidebar-foot">Отдельный доступ<br>Только собственный аккаунт</div>
+        </aside>
+        <div class="workspace-main">
+          <header class="workspace-heading"><div><span class="eyebrow">ЛИЧНОЕ ПРОСТРАНСТВО / ИНВЕСТОР</span><h1>Панель управления</h1><p id="account-username"></p></div><div class="workspace-identity glass"><span class="active-chip"><i></i> Доступ активен</span><strong id="account-name"></strong></div></header>
+          <div id="notice" class="notice hidden" role="status" aria-live="polite"></div>
+          <section id="pane-stars" role="tabpanel" aria-labelledby="tab-stars" class="panel-pane">
+            <div class="workspace-section-head"><span class="eyebrow">01 / ЗВЁЗДЫ</span><h2>Начисление звёзд</h2><p>Вы можете начислять звёзды только на свой аккаунт.</p></div>
+            <div class="workspace-grid"><article class="workspace-stat glass"><span>ДОСТУПНО СЕГОДНЯ</span><div class="metric" id="stars-remaining">—</div><p>До 150 000 за сутки (UTC)</p><p>Новый лимит через <strong id="stars-countdown">—</strong></p></article>
+              <div class="workspace-form glass"><h3>Начислить звёзды</h3><form id="stars-form"><label for="stars-amount">Количество звёзд</label><input id="stars-amount" type="number" min="1" max="150000" step="1" inputmode="numeric" required placeholder="Например, 10 000"><button class="primary-button" type="submit">Начислить звёзды <span aria-hidden="true">↗</span></button></form></div></div>
+          </section>
+          <section id="pane-names" role="tabpanel" aria-labelledby="tab-names" class="panel-pane hidden">
+            <div class="workspace-section-head"><span class="eyebrow">02 / NFT-ИМЕНА</span><h2>Коллекционные имена</h2><p>Выдавайте свободные имена только своему аккаунту.</p></div>
+            <div class="workspace-grid"><article class="workspace-stat glass"><span>СВОБОДНЫХ СЛОТОВ</span><div class="metric" id="names-remaining">—</div><p>Из 7 доступных NFT-имён</p><h3>Ваши имена</h3><ul id="owned-names" class="history"></ul></article>
+              <div class="workspace-form glass"><h3>Выдать имя</h3><p>От 4 до 32 символов: латинские буквы, цифры и _.</p><form id="names-form"><label for="mint-name">Новое имя</label><input id="mint-name" type="text" minlength="4" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" pattern="[a-zA-Z][a-zA-Z0-9_]{3,31}" required placeholder="например, delta_name"><p id="name-availability" role="status" aria-live="polite">Введите имя для проверки доступности.</p><button id="mint-submit" class="primary-button" type="submit" disabled>Выдать NFT-имя <span aria-hidden="true">↗</span></button></form></div></div>
+          </section>
+          <section id="pane-verified" role="tabpanel" aria-labelledby="tab-verified" class="panel-pane hidden">
+            <div class="workspace-section-head"><span class="eyebrow">03 / ВЕРИФИКАЦИЯ</span><h2>Отметка профиля</h2><p>Управляйте верификацией своего аккаунта.</p></div>
+            <div class="workspace-grid"><article class="workspace-stat glass"><span>ТЕКУЩЕЕ СОСТОЯНИЕ</span><div class="workspace-verified-symbol">✦</div><p id="verified-status">Загружаем состояние…</p></article>
+              <div class="workspace-form glass"><h3>Управление отметкой</h3><p>Включайте или снимайте верификацию. Изменение применяется к вашему аккаунту.</p><button class="primary-button" id="verified-toggle" type="button" disabled>Изменить отметку <span aria-hidden="true">↗</span></button></div></div>
+          </section>
+          </div>
+      </section>
+    </main>
+    <footer><span class="footer-brand">✦</span><span>DeltaGram © 2026</span><span>Для тех, кто меняет будущее.</span></footer>
+  </div>
+</body>
+</html>
