@@ -15,15 +15,21 @@ npm install
 
 1. `src/lib/gramjs/extensions/PromisedWebSockets.ts` — на HTTPS всегда
    подключаться к same-origin `wss://${location.host}/apiws...`, а не к
-   `zws*.web.telegram.org`.
-2. `src/api/gramjs/methods/settings.ts` — при получении langpack заменять
+   `zws*.web.telegram.org`. Важно: код исполняется в Web Worker, поэтому
+   использовать `self.location`, а не только `window.location`.
+2. `src/lib/gramjs/crypto/RSA.ts` — добавить публичный ключ DeltaGram
+   (fingerprint `-7080122280541503745`) с модулем из
+   `/var/lib/telesrv/server_rsa.pem`.
+3. `src/global/initialState.ts` — `shouldAllowHttpTransport: false`, иначе
+   клиент уходит на официальный `apiw1` Telegram и получает FLOOD_WAIT.
+4. `src/api/gramjs/methods/settings.ts` — при получении langpack заменять
    видимые `Telegram` на `DeltaGram` (кроме URL).
-3. `src/assets/localization/initialStrings.ts` и `fallback.strings` — брендинг
+5. `src/assets/localization/initialStrings.ts` и `fallback.strings` — брендинг
    строк.
-4. `src/components/auth/AuthQrCode.tsx` и `Auth.scss` — логотип DeltaGram в
+6. `src/components/auth/AuthQrCode.tsx` и `Auth.scss` — логотип DeltaGram в
    центре QR.
-5. `public/icon-*.png`, `apple-touch-icon.png`, `favicon.*` — иконки DeltaGram.
-6. `src/config.ts` — версии кэшей `tt-assets-dg2` / snapshot, чтобы старый
+7. `public/icon-*.png`, `apple-touch-icon.png`, `favicon.*` — иконки DeltaGram.
+8. `src/config.ts` — версии кэшей `tt-assets-dg2` / snapshot, чтобы старый
    service worker не отдавал старый брендинг.
 
 ## Сборка
