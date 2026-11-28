@@ -13,6 +13,13 @@ npm install
 
 ## Патчи
 
+Три критичных файла лежат готовыми в `patches/` — их можно применить одной
+командой:
+
+```bash
+./patches/apply.sh ../telegram-tt
+```
+
 1. `src/lib/gramjs/extensions/PromisedWebSockets.ts` — на HTTPS всегда
    подключаться к same-origin `wss://${location.host}/apiws...`, а не к
    `zws*.web.telegram.org`. Важно: код исполняется в Web Worker, поэтому
