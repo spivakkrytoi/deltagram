@@ -185,7 +185,9 @@ async function proxyAnimation(res, path) {
   const data = await response.text();
   res.writeHead(200, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'private, max-age=300',
+    // Attribute animations are immutable per id. Let the Telegram WebView keep
+    // them on disk so reopening a collection does not download them again.
+    'Cache-Control': 'private, max-age=86400, immutable',
     'X-Content-Type-Options': 'nosniff',
   });
   res.end(data);
