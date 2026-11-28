@@ -121,6 +121,61 @@ function mountLottie(container, animationData, { loop = true, size = '100%' } = 
   return animation;
 }
 
+function previewHasContent(animation, container) {
+  const svg = container.querySelector('svg');
+  if (!svg) return false;
+  const total = Math.max(1, Math.round(animation.totalFrames || 1));
+  animation.pause?.();
+  let area = 0;
+  for (const ratio of [0.02, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9]) {
+    animation.goToAndStop(Math.min(total - 1, Math.floor(total * ratio)), true);
+    for (const path of svg.querySelectorAll('path')) {
+      try {
+        const box = path.getBBox();
+        if (box.width > 0 && box.height > 0) area += box.width * box.height;
+      } catch {
+        // Path is not rendered at this frame.
+      }
+    }
+    if (area > 800) return true;
+  }
+  return area > 800;
+}
+
+function showStaticModel(container, giftID, modelID) {
+  container.innerHTML = '';
+  const image = document.createElement('img');
+  image.className = 'attr__still';
+  image.alt = '';
+  image.src = `/gift-lab/thumbs/models/${giftID}-${modelID}.png?v=20261129`;
+  image.style.width = '100%';
+  image.style.height = '100%';
+  image.style.objectFit = 'contain';
+  container.appendChild(image);
+}
+
+// Some released model animations have broken parenting/opacity and render an
+// empty SVG at every frame. Fall back to the pre-rendered still so the preview
+// never shows a blank card.
+function guardModelPreview(animation, container, giftID, modelID) {
+  const started = Date.now();
+  const check = () => {
+    if (!animation.isLoaded && !animation.totalFrames) {
+      if (Date.now() - started < 4000) window.setTimeout(check, 60);
+      return;
+    }
+    if (previewHasContent(animation, container)) {
+      animation.play?.();
+      return;
+    }
+    const index = previewAnims.indexOf(animation);
+    if (index >= 0) previewAnims.splice(index, 1);
+    try { animation.destroy(); } catch { /* already detached */ }
+    showStaticModel(container, giftID, modelID);
+  };
+  window.setTimeout(check, 60);
+}
+
 function pick(list) {
   if (!list?.length) return null;
   return list[Math.floor(Math.random() * list.length)];
@@ -171,7 +226,10 @@ function updatePreview() {
       .then((data) => {
         if (token !== state.previewToken) return;
         const animation = mountLottie(modelBox, data, { loop: true });
-        if (animation) previewAnims.push(animation);
+        if (animation) {
+          previewAnims.push(animation);
+          guardModelPreview(animation, modelBox, state.gift.id, items.model.id);
+        }
       })
       .catch(() => {});
   }
@@ -191,14 +249,11 @@ function updateIssueState() {
     issueButton.disabled = true;
     return;
   }
-  const exhausted = state.catalog.total > 0 && state.catalog.issued >= state.catalog.total;
   const selected = state.selection.backdrop && state.selection.model && state.selection.pattern;
-  const ready = Boolean(initData) && !exhausted && selected;
+  const ready = Boolean(initData) && selected;
   issueButton.disabled = !ready;
   if (!initData) {
     setIssueStatus('Откройте Gift Lab через кнопку бота в Telegram.', 'warn');
-  } else if (exhausted) {
-    setIssueStatus('Этот подарок сейчас недоступен для выдачи.', 'warn');
   } else if (!selected) {
     setIssueStatus('Выберите фон, модель и символ.', 'warn');
   } else {
@@ -213,11 +268,7 @@ function renderDetail() {
   $('detail-title').textContent = gift.title;
   $('detail-meta').textContent = 'Коллекция' + (gift.enabled ? '' : ' · снят с продажи');
   const hint = $('detail-hint');
-  if (catalog.total > 0 && catalog.issued >= catalog.total) {
-    hint.textContent = 'Этот подарок сейчас недоступен для выдачи.';
-  } else {
-    hint.textContent = `Подарок будет выдан получателю ${state.recipient || 'Gift Lab'} и появится в его профиле DeltaGram.`;
-  }
+  hint.textContent = `Подарок будет выдан получателю ${state.recipient || 'Gift Lab'} и появится в его профиле DeltaGram.`;
   updatePreview();
   updateIssueState();
 }
@@ -270,7 +321,6 @@ function renderList() {
     row.type = 'button';
     row.className = 'glist__row';
     row.style.setProperty('--i', String(Math.min(index, 12)));
-    if (gift.total > 0 && gift.issued >= gift.total) row.classList.add('is-exhausted');
 
     const art = document.createElement('span');
     art.className = 'glist__art';
@@ -324,7 +374,7 @@ function attachThumb(container, kind, item) {
     image.alt = '';
     image.loading = 'lazy';
     image.decoding = 'async';
-    image.src = `/gift-lab/thumbs/models/${state.gift.id}-${item.id}.png?v=20261128`;
+    image.src = `/gift-lab/thumbs/models/${state.gift.id}-${item.id}.png?v=20261129`;
     image.addEventListener('error', () => {
       image.remove();
       mountLottieFallback(container, kind, item);

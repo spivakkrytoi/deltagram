@@ -146,7 +146,13 @@ async function listGifts() {
 async function collectibles(giftID) {
   const result = await adminRequest('GET', `/v1/gifts/${giftID}/collectibles`);
   if (!result?.found) throw new Error('У этого подарка нет опубликованной коллекции');
-  const map = (rows) => (rows || []).map((row) => ({
+  // Only non-crafted permille attributes with a positive weight are issuable
+  // through the admin grant path. Crafted models are craft-only and make the
+  // server reject the whole collectible definition.
+  const issuable = (row) => !row.crafted
+    && row.rarity_kind === 'permille'
+    && Number(row.rarity_permille || 0) > 0;
+  const map = (rows) => (rows || []).filter(issuable).map((row) => ({
     id: String(row.id || ''),
     name: row.name || 'Без названия',
     rarity: Number(row.rarity_permille || 0),
@@ -190,7 +196,38 @@ async function proxyAnimation(res, path) {
     'Cache-Control': 'private, max-age=86400, immutable',
     'X-Content-Type-Options': 'nosniff',
   });
-  res.end(data);
+  res.end(repairAnimation(data));
+}
+
+// Некоторые выпущенные анимации содержат пустые shape-слои без поля shapes.
+// lottie-web падает на них с "Cannot read properties of undefined", поэтому
+// перед отдачей в WebView чиним такие слои, чтобы карточка модели рисовалась.
+function repairAnimation(raw) {
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+  if (!data || typeof data !== 'object') return raw;
+  let changed = false;
+  const fixLayers = (layers) => {
+    if (!Array.isArray(layers)) return;
+    for (const layer of layers) {
+      if (!layer || typeof layer !== 'object') continue;
+      if (layer.ty === 4 && !Array.isArray(layer.shapes)) {
+        layer.shapes = [];
+        changed = true;
+      }
+    }
+  };
+  fixLayers(data.layers);
+  if (Array.isArray(data.assets)) {
+    for (const asset of data.assets) {
+      if (asset && typeof asset === 'object') fixLayers(asset.layers);
+    }
+  }
+  return changed ? JSON.stringify(data) : raw;
 }
 
 async function issue(body, user) {
@@ -213,7 +250,6 @@ async function issue(body, user) {
   if (recentIssues.has(dedupe)) throw new Error('Этот подарок уже выдан');
 
   const catalog = await collectibles(giftID);
-  if (catalog.total > 0 && catalog.issued >= catalog.total) throw new Error('Тираж коллекции уже полностью выпущен');
   if (!catalog.models.some((item) => item.id === model)) throw new Error('Выбранная модель не принадлежит этому подарку');
   if (!catalog.patterns.some((item) => item.id === pattern)) throw new Error('Выбранный символ не принадлежит этому подарку');
   if (!catalog.backdrops.some((item) => item.id === backdrop)) throw new Error('Выбранный фон не принадлежит этому подарку');
@@ -229,6 +265,7 @@ async function issue(body, user) {
     gift_id: Number(giftID),
     upgrade: true,
     allow_disabled: true,
+    allow_exhausted: true,
     model_attribute_id: Number(model),
     pattern_attribute_id: Number(pattern),
     backdrop_attribute_id: Number(backdrop),
@@ -325,7 +362,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(port, listen, () => console.log(`Gift Lab listening at ${listen}:${port}`));
 
-if (token && /^https:\/\//.test(publicUrl)) {
+if (token && /^https:\/\//.test(publicUrl) && process.env.GIFT_LAB_BOT_POLL !== '0') {
   let offset = 0;
   async function poll() {
     while (true) {
@@ -348,7 +385,12 @@ if (token && /^https:\/\//.test(publicUrl)) {
             await telegram('sendMessage', {
               chat_id: msg.chat.id,
               text: '🎁 Gift Lab — выдача уже выпущенных коллекционных подарков DeltaGram.\n\nВыберите подарок и коллекцию, настройте фон, модель и символ, затем нажмите «Выдать». Подарок придёт получателю, указанному в настройках Gift Lab.',
-              reply_markup: { inline_keyboard: [[{ text: 'Открыть Gift Lab', web_app: { url: publicUrl } }]] },
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '🎁 Открыть Gift Lab', web_app: { url: publicUrl }, style: 'success' }],
+                  [{ text: '📖 Как это работает', url: 'https://dltagram.duckdns.org/docs/', style: 'primary' }],
+                ],
+              },
             });
           }
         }

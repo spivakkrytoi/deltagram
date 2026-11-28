@@ -32,6 +32,7 @@ button, input { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #app { max-width: 520px; margin: 0 auto; padding: calc(14px + var(--safe-top)) 16px calc(112px + var(--safe-bottom)); min-height: 100vh; }
+[hidden] { display: none !important; }
 .view[hidden], .cta[hidden], .sheet-overlay[hidden], .toast[hidden] { display: none !important; }
 .view > * { animation: rise .32s var(--ease) backwards; }
 
