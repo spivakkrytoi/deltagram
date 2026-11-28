@@ -12,7 +12,9 @@ Mini App для выдачи **уже выпущенных** коллекцио�
 - `GET /gift-lab/api/gifts/{id}/collectibles/{kind}/{attribute}/animation` —
   Lottie-анимация модели или символа.
 - `POST /gift-lab/api/issue` — выдача подарка через admin API
-  (`POST /v1/gifts/give`, `upgrade=true`, `allow_disabled=true`).
+  (`POST /v1/gifts/give`, `upgrade=true`, `allow_disabled=true`,
+  `allow_exhausted=true`). Полностью исчерпанный тираж расширяется на один
+  номер, чтобы владелец мог выдать любой выпущенный подарок.
 
 Все запросы требуют подпись Telegram Mini App (`X-Init-Data`) и аккаунт из
 `GIFT_LAB_OWNER_IDS`. Прямой доступ из браузера без initData запрещён.
@@ -27,6 +29,7 @@ GIFT_LAB_GRANT_USER_ID=    # запасной вариант: числовой I
 GIFT_LAB_PUBLIC_URL=       # https://.../gift-lab/
 GIFT_LAB_ADMIN_API=        # http://127.0.0.1:2599
 GIFT_LAB_ADMIN_TOKEN=      # bearer-токен admin API
+GIFT_LAB_BOT_POLL=1        # 0 — updates обрабатывает основной бот (полная копия)
 ```
 
 Токены хранятся только в `/etc/deltagram-gift-lab.env` с правами `600` и не
