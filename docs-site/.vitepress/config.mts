@@ -2,8 +2,8 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   lang: 'ru',
-  title: 'DeltaGram Docs',
-  description: 'Документация DeltaGram: сервер, клиенты, боты, Gift Lab и веб-версия',
+  title: 'DeltaGram Bot API',
+  description: 'HTTP Bot API DeltaGram, совместимый с Telegram Bot API',
   base: '/docs/',
   cleanUrls: true,
   head: [
@@ -13,48 +13,31 @@ export default defineConfig({
   ],
   themeConfig: {
     logo: '/logo.svg',
-    siteTitle: 'DeltaGram',
+    siteTitle: 'DeltaGram Bot API',
     nav: [
       { text: 'Руководство', link: '/' },
-      { text: 'Gift Lab', link: '/gift-lab' },
-      { text: 'Bot API', link: '/bots' },
-      { text: 'Веб-версия', link: '/web' },
-      { text: 'Windows', link: '/windows' },
+      { text: 'Методы', link: '/methods' },
+      { text: 'Типы', link: '/types' },
+      { text: 'Ошибки', link: '/errors' },
     ],
     sidebar: [
       {
-        text: 'Начало',
+        text: 'Bot API',
         items: [
-          { text: 'Обзор', link: '/' },
-          { text: 'Быстрый доступ', link: '/#быстрый-доступ' },
+          { text: 'Начало работы', link: '/' },
+          { text: 'Адрес и авторизация', link: '/#адрес-api' },
+          { text: 'Форматы запросов', link: '/#форматы-запросов' },
+          { text: 'Обновления', link: '/#обновления' },
+          { text: 'Файлы', link: '/#файлы' },
+          { text: 'Mini Apps', link: '/#mini-apps' },
         ],
       },
       {
-        text: 'Сервер',
+        text: 'Справочник',
         items: [
-          { text: 'Архитектура', link: '/#архитектура' },
-          { text: 'Аккаунты и вход', link: '/#аккаунты-и-вход' },
-          { text: 'Админ-панель', link: '/admin' },
-          { text: 'Подарки', link: '/gifts' },
-          { text: 'Deltament', link: '/deltament' },
-        ],
-      },
-      {
-        text: 'Боты',
-        items: [
-          { text: 'Обзор ботов', link: '/bots' },
-          { text: 'Bot API', link: '/bots#http-bot-api' },
-          { text: 'BotFather', link: '/bots#botfather' },
-        ],
-      },
-      {
-        text: 'Инструменты',
-        items: [
-          { text: 'Gift Lab', link: '/gift-lab' },
-          { text: 'Веб-версия', link: '/web' },
-          { text: 'Windows-клиент', link: '/windows' },
-          { text: 'Безопасность', link: '/security' },
-          { text: 'Диагностика', link: '/security#диагностика' },
+          { text: 'Все методы', link: '/methods' },
+          { text: 'Типы', link: '/types' },
+          { text: 'Ошибки и лимиты', link: '/errors' },
         ],
       },
     ],
@@ -64,9 +47,8 @@ export default defineConfig({
     darkModeSwitchLabel: 'Тема',
     sidebarMenuLabel: 'Меню',
     returnToTopLabel: 'Наверх',
-    lastUpdated: { text: 'Обновлено' },
     footer: {
-      message: 'DeltaGram · самостоятельный MTProto-сервер и клиенты',
+      message: 'DeltaGram Bot API',
       copyright: '© 2026 DeltaGram',
     },
   },
