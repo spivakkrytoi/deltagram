@@ -6270,17 +6270,17 @@ index 0000000..c08a9cf
 +  }
 +}
 diff --git a/src/types/index.ts b/src/types/index.ts
-index a9a430d..930f969 100644
+index a9a430d..2693eca 100644
 --- a/src/types/index.ts
 +++ b/src/types/index.ts
-@@ -317,6 +317,7 @@ export enum SettingsScreens {
-   PasscodeTurnOff,
-   PasscodeCongratulations,
-   Experimental,
+@@ -324,6 +324,7 @@ export enum SettingsScreens {
+   FoldersShare,
+   Passkeys,
+   KeyboardShortcuts,
 +  DeltaGram,
-   Stickers,
-   QuickReaction,
-   CustomEmoji,
+ }
+ 
+ export type StickerSetOrReactionsSetOrRecent = Pick<ApiStickerSet, (
 diff --git a/src/util/deltagram/prefs.ts b/src/util/deltagram/prefs.ts
 new file mode 100644
 index 0000000..95472b4
