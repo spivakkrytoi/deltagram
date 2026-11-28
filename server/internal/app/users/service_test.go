@@ -112,7 +112,7 @@ func TestServiceUsernameLifecycle(t *testing.T) {
 	}
 }
 
-func TestAdminUpdateUsernameAllowsThreeCharacterNames(t *testing.T) {
+func TestAdminUpdateUsernameAllowsTwoCharacterNames(t *testing.T) {
 	ctx := context.Background()
 	store := memory.NewUserStore()
 	owner, err := store.Create(ctx, domain.User{AccessHash: 1, Phone: "15550000101", FirstName: "Owner"})
@@ -121,16 +121,24 @@ func TestAdminUpdateUsernameAllowsThreeCharacterNames(t *testing.T) {
 	}
 	svc := NewService(store)
 
-	updated, err := svc.AdminUpdateUsername(ctx, owner.ID, "@ab_")
+	updated, err := svc.AdminUpdateUsername(ctx, owner.ID, "@ab")
 	if err != nil {
 		t.Fatalf("AdminUpdateUsername short name: %v", err)
 	}
-	if updated.Username != "ab_" {
-		t.Fatalf("AdminUpdateUsername = %q, want ab_", updated.Username)
+	if updated.Username != "ab" {
+		t.Fatalf("AdminUpdateUsername = %q, want ab", updated.Username)
+	}
+	viewer, err := store.Create(ctx, domain.User{AccessHash: 2, Phone: "15550000102", FirstName: "Viewer"})
+	if err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+	resolved, found, err := svc.ResolveUsername(ctx, viewer.ID, "@ab")
+	if err != nil || !found || resolved.ID != owner.ID {
+		t.Fatalf("ResolveUsername(@ab) = user %+v found %v err %v, want owner", resolved, found, err)
 	}
 
-	if _, err := svc.AdminUpdateUsername(ctx, owner.ID, "ab"); !errors.Is(err, domain.ErrUsernameInvalid) {
-		t.Fatalf("AdminUpdateUsername two characters err = %v, want username invalid", err)
+	if _, err := svc.AdminUpdateUsername(ctx, owner.ID, "a"); !errors.Is(err, domain.ErrUsernameInvalid) {
+		t.Fatalf("AdminUpdateUsername one character err = %v, want username invalid", err)
 	}
 	// The public surface keeps its five-character minimum.
 	if _, err := svc.UpdateUsername(ctx, owner.ID, "abc"); !errors.Is(err, domain.ErrUsernameInvalid) {

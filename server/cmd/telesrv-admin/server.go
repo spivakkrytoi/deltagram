@@ -71,6 +71,9 @@ func (s *server) routes() http.Handler {
 	mux.Handle("POST /api/actions/create-admin-operator", s.requireAdminsManage(http.HandlerFunc(s.handleCreateAdminUserAPI)))
 	mux.Handle("POST /api/actions/set-admin-operator-access", s.requireAdminsManage(http.HandlerFunc(s.handleUpdateAdminUserAPI)))
 	mux.Handle("POST /api/actions/set-admin-operator-password", s.requireAdminsManage(http.HandlerFunc(s.handleSetAdminUserPasswordAPI)))
+	mux.Handle("GET /api/investors", s.requireAdminsManage(http.HandlerFunc(s.handleInvestorsAPI)))
+	mux.Handle("POST /api/actions/set-investor-access", s.requireAdminsManage(http.HandlerFunc(s.handleInvestorAccessAPI)))
+	mux.HandleFunc("POST /api/investor-bridge", s.handleInvestorBridge)
 
 	// The global action log. Supervisory, so it gets its own right rather than
 	// riding on the sections it covers.
@@ -2418,6 +2421,14 @@ func (s *server) handleImportGiftPackAPI(w http.ResponseWriter, r *http.Request)
 		CommandID string `json:"command_id"`
 		Reason    string `json:"reason"`
 		Confirm   bool   `json:"confirm"`
+
+		LockedUntilDate               int    `json:"locked_until_date"`
+		PurchaseWindowEnabled         bool   `json:"purchase_window_enabled"`
+		PurchaseWindowStartMinute     int    `json:"purchase_window_start_minute"`
+		PurchaseWindowDurationMinutes int    `json:"purchase_window_duration_minutes"`
+		PurchaseWindowTimezone        string `json:"purchase_window_timezone"`
+		AvailabilityTotal             int    `json:"availability_total"`
+		PerUserTotal                  int    `json:"per_user_total"`
 	}
 	dec := json.NewDecoder(strings.NewReader(r.FormValue("metadata")))
 	dec.DisallowUnknownFields()
@@ -2439,6 +2450,14 @@ func (s *server) handleImportGiftPackAPI(w http.ResponseWriter, r *http.Request)
 	req := admin.ImportGiftPackRequest{
 		CommandMeta: s.commandMetaFromAPI(r, body.CommandID, body.Reason, body.Confirm, "import-gift-pack"),
 		FileName:    header.Filename,
+
+		LockedUntilDate:               body.LockedUntilDate,
+		PurchaseWindowEnabled:         body.PurchaseWindowEnabled,
+		PurchaseWindowStartMinute:     body.PurchaseWindowStartMinute,
+		PurchaseWindowDurationMinutes: body.PurchaseWindowDurationMinutes,
+		PurchaseWindowTimezone:        body.PurchaseWindowTimezone,
+		AvailabilityTotal:             body.AvailabilityTotal,
+		PerUserTotal:                  body.PerUserTotal,
 	}
 	result, err := s.callAdminMultipart(r.Context(), "/v1/gifts/import-pack", req, header.Filename, data)
 	writeCommandResultAPI(w, result, err)

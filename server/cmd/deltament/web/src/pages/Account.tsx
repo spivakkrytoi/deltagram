@@ -474,7 +474,7 @@ function ItemDetails({ item, onClose }: { item: InvItem; onClose: () => void }) 
                 onClick={() =>
                   act(async () => {
                     const res = await sellItem(item.id)
-                    if (res) toast(`Лот выставлен за ${fmt(res.price)} GRAM — TON придёт на карту после покупки`, 'success')
+                    if (res) toast(`Лот выставлен за ${fmt(res.price)} GRAM — GRAM придёт на карту после покупки`, 'success')
                     return res !== null
                   })
                 }
@@ -519,6 +519,7 @@ export function ProfilePage() {
   const [withdraw, setWithdraw] = useState(false)
   const [editProfile, setEditProfile] = useState(false)
   const [sendTON, setSendTON] = useState(false)
+  const [gramCard, setGramCard] = useState(false)
   const [buyTON, setBuyTON] = useState(false)
   const [tonLog, setTonLog] = useState(false)
   const { data: servers } = useServers()
@@ -584,16 +585,19 @@ export function ProfilePage() {
         <div className="card rounded-[16px] p-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted">Карты в профиле DeltaGram</p>
-              <p className="mt-1 text-[26px] font-bold tabular">{fmt(ton)} <span className="text-sm text-muted">TON</span></p>
-              <p className="text-[15px] tabular text-muted">{fmt(stars)} <span className="text-xs">⭐</span>{tonPending > 0 ? ` · в отправке ${fmt(tonPending)} TON` : ''}</p>
+              <p className="text-xs uppercase tracking-wide text-muted">Карта DeltaGram</p>
+              <p className="mt-1 text-[26px] font-bold tabular">{fmt(ton)} <span className="text-sm text-muted">GRAM</span></p>
+              <p className="text-[15px] tabular text-muted">{fmt(stars)} <span className="text-xs">⭐</span>{tonPending > 0 ? ` · в отправке ${fmt(tonPending)} GRAM` : ''}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => setSendTON(true)}>
-                <ArrowUpRightIcon className="size-4" /> Вывести TON
+              <Button onClick={() => setGramCard(true)}>
+                <ArrowUpRightIcon className="size-4" /> Вывести GRAM
+              </Button>
+              <Button variant="glass" onClick={() => setSendTON(true)} disabled={ton <= 0}>
+                <ArrowUpRightIcon className="size-4" /> С карты
               </Button>
               <Button variant="glass" onClick={() => setWithdraw(true)} disabled={rate <= 0}>
-                <ArrowUpRightIcon className="size-4" /> Вывести звёзды
+                <ArrowUpRightIcon className="size-4" /> В звёзды
               </Button>
             </div>
           </div>
@@ -719,6 +723,7 @@ export function ProfilePage() {
       <TopUpSheet open={topup} onClose={() => setTopup(false)} />
       <WithdrawSheet open={withdraw} onClose={() => setWithdraw(false)} rate={rate} balance={balance} />
       <ProfileEditSheet open={editProfile} onClose={() => setEditProfile(false)} />
+      <GramCardSheet open={gramCard} onClose={() => setGramCard(false)} balance={balance} />
       <TONSendSheet open={sendTON} onClose={() => setSendTON(false)} ton={ton} />
       <TONBuySheet open={buyTON} onClose={() => setBuyTON(false)} />
       <TONHistorySheet open={tonLog} onClose={() => setTonLog(false)} />
@@ -946,6 +951,57 @@ function TopUpSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
 
 /* ------------------------------ TON sheets ------------------------------ */
 
+function GramCardSheet({ open, onClose, balance }: { open: boolean; onClose: () => void; balance: number }) {
+  const { withdrawTON, toast } = useStore()
+  const [amount, setAmount] = useState(1)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setAmount(balance >= 1 ? Math.floor(balance) : 1)
+      setLoading(false)
+    }
+  }, [open, balance])
+
+  const tooMuch = amount > balance
+  const submit = async () => {
+    setLoading(true)
+    const res = await withdrawTON(amount)
+    setLoading(false)
+    if (!res) return
+    toast(`${fmt(res.credited)} GRAM зачислено на карту DeltaGram`, 'success')
+    onClose()
+  }
+
+  return (
+    <Modal open={open} onClose={onClose}>
+      <div className="px-6 pt-10 pb-6 text-center">
+        <span className="mx-auto grid size-16 place-items-center rounded-full bg-accent/15 text-accent">
+          <GramIcon className="size-9" />
+        </span>
+        <h3 className="mt-4 text-[22px] font-bold">Вывести GRAM на карту</h3>
+        <p className="mt-1 text-sm text-muted">1 GRAM = 1 GRAM на карте DeltaGram. Сумма появится на карте сразу.</p>
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <input
+            type="number"
+            min={1}
+            max={Math.max(1, balance)}
+            step={1}
+            value={amount}
+            onChange={(e) => setAmount(Math.max(1, Number(e.target.value)))}
+            className="w-36 rounded-2xl bg-white/5 px-4 py-3 text-center text-[22px] font-bold outline-none ring-1 ring-white/10 focus:ring-accent"
+          />
+          <span className="text-sm font-semibold text-muted">GRAM</span>
+        </div>
+        <p className="mt-1 text-xs text-subtle">Доступно: {fmt(balance)} GRAM</p>
+        <Button size="lg" className="mt-6 w-full" onClick={submit} disabled={loading || tooMuch || amount < 1}>
+          {loading ? 'Обработка…' : tooMuch ? 'Недостаточно GRAM' : `На карту · ${fmt(amount)} GRAM`}
+        </Button>
+      </div>
+    </Modal>
+  )
+}
+
 function TONSendSheet({ open, onClose, ton }: { open: boolean; onClose: () => void; ton: number }) {
   const { requestTONPayout, setTONAddress, toast } = useStore()
   const [amount, setAmount] = useState(1)
@@ -972,7 +1028,7 @@ function TONSendSheet({ open, onClose, ton }: { open: boolean; onClose: () => vo
     const res = await requestTONPayout(amount, note)
     setLoading(false)
     if (!res) return
-    toast('Заявка на вывод TON создана', 'success')
+    toast('Заявка на отправку GRAM создана', 'success')
     onClose()
   }
 
@@ -983,8 +1039,8 @@ function TONSendSheet({ open, onClose, ton }: { open: boolean; onClose: () => vo
           <span className="mx-auto grid size-16 place-items-center rounded-full bg-[#0098EA]/15">
             <GramIcon className="size-9" />
           </span>
-          <h3 className="mt-4 text-[22px] font-bold">Вывод TON</h3>
-          <p className="mt-1 text-sm text-muted">Заявка уйдёт владельцу. Он напишет вам в Telegram, уточнит кошелёк и отправит TON.</p>
+          <h3 className="mt-4 text-[22px] font-bold">Отправка GRAM с карты</h3>
+          <p className="mt-1 text-sm text-muted">Заявка уйдёт владельцу. Он напишет вам в Telegram, уточнит кошелёк и отправит GRAM.</p>
         </div>
         <label className="mt-5 block">
           <span className="mb-1.5 block text-[12px] font-semibold text-muted">Сумма</span>
@@ -997,12 +1053,12 @@ function TONSendSheet({ open, onClose, ton }: { open: boolean; onClose: () => vo
               onChange={(e) => setAmount(Math.max(0, Number(e.target.value)))}
               className="min-w-0 flex-1 bg-transparent text-[22px] font-bold outline-none"
             />
-            <span className="text-sm font-bold text-muted">TON</span>
+            <span className="text-sm font-bold text-muted">GRAM</span>
           </div>
         </label>
-        <p className="mt-1 text-xs text-subtle tabular">Доступно: {fmt(ton)} TON</p>
+        <p className="mt-1 text-xs text-subtle tabular">Доступно на карте: {fmt(ton)} GRAM</p>
         <label className="mt-4 block">
-          <span className="mb-1.5 block text-[12px] font-semibold text-muted">Адрес TON или .ton</span>
+          <span className="mb-1.5 block text-[12px] font-semibold text-muted">Адрес кошелька</span>
           <input
             value={address}
             onChange={(e) => setAddress(e.target.value)}
@@ -1020,10 +1076,10 @@ function TONSendSheet({ open, onClose, ton }: { open: boolean; onClose: () => vo
           />
         </label>
         <div className="mt-4 rounded-[12px] border border-line bg-white/[0.03] p-3 text-left text-[11.5px] leading-relaxed text-subtle">
-          Адрес сохраняется на карте DeltaGram и виден владельцу. Можно указать UQ/EQ-адрес или свой .ton домен — владелец отправит TON туда.
+          Адрес сохраняется на карте DeltaGram и виден владельцу. Можно указать UQ/EQ-адрес или свой .ton домен — владелец отправит GRAM туда.
         </div>
         <Button size="lg" className="mt-5 w-full" onClick={submit} disabled={loading || tooMuch || amount <= 0}>
-          {loading ? 'Создаём заявку…' : tooMuch ? 'Недостаточно TON' : `Вывести ${fmt(amount)} TON`}
+          {loading ? 'Создаём заявку…' : tooMuch ? 'Недостаточно GRAM' : `Отправить ${fmt(amount)} GRAM`}
         </Button>
       </div>
     </Modal>
@@ -1037,14 +1093,14 @@ function TONBuySheet({ open, onClose }: { open: boolean; onClose: () => void }) 
         <span className="mx-auto grid size-16 place-items-center rounded-full bg-[#0098EA]/15">
           <GramIcon className="size-9" />
         </span>
-        <h3 className="mt-4 text-[22px] font-bold">Купить TON</h3>
-        <p className="mt-1 text-sm text-muted">Фиксированный курс: <b className="text-fg">100 TON = 30 ₽</b></p>
+        <h3 className="mt-4 text-[22px] font-bold">Купить GRAM</h3>
+        <p className="mt-1 text-sm text-muted">Фиксированный курс: <b className="text-fg">100 GRAM = 30 ₽</b></p>
         <div className="mt-5 rounded-[14px] border border-line bg-white/[0.03] p-4 text-left">
           <ol className="space-y-2.5 text-[13px] text-muted">
-            <li className="flex gap-2.5"><b className="shrink-0 text-fg">1.</b><span>Откройте бота и нажмите «Купить TON».</span></li>
+            <li className="flex gap-2.5"><b className="shrink-0 text-fg">1.</b><span>Откройте бота и нажмите «Купить GRAM».</span></li>
             <li className="flex gap-2.5"><b className="shrink-0 text-fg">2.</b><span>Бот попросит написать владельцу <b className="font-semibold text-fg">@linuxoidddd</b> и обсудить оплату.</span></li>
             <li className="flex gap-2.5"><b className="shrink-0 text-fg">3.</b><span>После оплаты нажмите «Написал» — владелец получит заявку.</span></li>
-            <li className="flex gap-2.5"><b className="shrink-0 text-fg">4.</b><span>Владелец отправит TON на вашу карту, и баланс обновится.</span></li>
+            <li className="flex gap-2.5"><b className="shrink-0 text-fg">4.</b><span>Владелец отправит GRAM на вашу карту, и баланс обновится.</span></li>
           </ol>
         </div>
         <a
@@ -1085,7 +1141,7 @@ function TONHistorySheet({ open, onClose }: { open: boolean; onClose: () => void
   return (
     <Modal open={open} onClose={onClose}>
       <div className="px-6 pt-10 pb-6">
-        <h3 className="text-center text-[22px] font-bold">История TON</h3>
+        <h3 className="text-center text-[22px] font-bold">История GRAM</h3>
         <p className="mt-1 text-center text-sm text-muted">Начисления, выводы и отправки с карты</p>
         <div className="mt-5 divide-y divide-white/5">
           {loading ? (
@@ -1103,7 +1159,7 @@ function TONHistorySheet({ open, onClose }: { open: boolean; onClose: () => void
                   <p className="text-[11px] text-subtle">{fmtAgo(e.created)}</p>
                 </div>
                 <span className={clsx('shrink-0 text-[13px] font-semibold tabular', e.amount > 0 ? 'text-success' : 'text-fg')}>
-                  {e.amount > 0 ? '+' : '−'}{fmt(Math.abs(e.amount))} TON
+                  {e.amount > 0 ? '+' : '−'}{fmt(Math.abs(e.amount))} GRAM
                 </span>
               </div>
             ))

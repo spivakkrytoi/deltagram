@@ -227,3 +227,62 @@ export function localInputValue(offsetSeconds: number): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
+
+// Gift drops are authored in Kyiv time. The admin may sit in any timezone, so a
+// datetime-local value must not be interpreted with the browser's zone: read the
+// wall clock as Europe/Kyiv and convert it to the Unix second the API stores.
+// Clients then render that instant in each user's own timezone.
+export const DELTAGRAM_SCHEDULE_TIMEZONE = "Europe/Kyiv";
+
+function zonedParts(value: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).formatToParts(value);
+  const pick = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  return {
+    year: pick("year"),
+    month: pick("month"),
+    day: pick("day"),
+    // Some engines report midnight as 24 with hour12:false.
+    hour: pick("hour") % 24,
+    minute: pick("minute"),
+    second: pick("second")
+  };
+}
+
+export function zonedToUnix(value: string, timeZone = DELTAGRAM_SCHEDULE_TIMEZONE): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value.trim());
+  if (!match) return 0;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const target = Date.UTC(year, month - 1, day, hour, minute, 0);
+  // Two or three passes are enough for every DST rule; each pass corrects the
+  // guess by the zone offset at that instant.
+  let timestamp = target;
+  for (let pass = 0; pass < 3; pass++) {
+    const parts = zonedParts(new Date(timestamp), timeZone);
+    const actual = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+    timestamp += target - actual;
+  }
+  return Math.floor(timestamp / 1000);
+}
+
+export function kyivToUnix(value: string): number {
+  return zonedToUnix(value, DELTAGRAM_SCHEDULE_TIMEZONE);
+}
+
+export function kyivLocalInputValue(offsetSeconds: number): string {
+  const parts = zonedParts(new Date(Date.now() + offsetSeconds * 1000), DELTAGRAM_SCHEDULE_TIMEZONE);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`;
+}

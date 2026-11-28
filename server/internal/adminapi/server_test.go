@@ -677,6 +677,39 @@ func TestAdminAPIResolveUserByPhoneNotFound(t *testing.T) {
 	}
 }
 
+type resolveByUsernameService struct {
+	Service
+	username string
+	user     domain.User
+	found    bool
+}
+
+func (s *resolveByUsernameService) ResolveUserByUsername(_ context.Context, username string) (domain.User, bool, error) {
+	s.username = username
+	return s.user, s.found, nil
+}
+
+func TestAdminAPIResolveUserByUsername(t *testing.T) {
+	svc := &resolveByUsernameService{found: true, user: domain.User{ID: 1780243207}}
+	srv := &Server{token: "secret", svc: svc}
+	req := httptest.NewRequest(http.MethodPost, "/v1/accounts/resolve-by-username", strings.NewReader(`{"username":"@some_user"}`))
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	srv.routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || svc.username != "some_user" || !strings.Contains(rec.Body.String(), `"user_id":1780243207`) {
+		t.Fatalf("status=%d username=%q body=%s", rec.Code, svc.username, rec.Body.String())
+	}
+	for _, invalid := range []string{"+12345678", "a b", "abc", "a@bc"} {
+		req := httptest.NewRequest(http.MethodPost, "/v1/accounts/resolve-by-username", strings.NewReader(`{"username":"`+invalid+`"}`))
+		req.Header.Set("Authorization", "Bearer secret")
+		rec := httptest.NewRecorder()
+		srv.routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("invalid %q status=%d", invalid, rec.Code)
+		}
+	}
+}
+
 type captureFreezeService struct {
 	fakeService
 	req admin.SetAccountFrozenRequest

@@ -245,6 +245,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/accounts/grant-stars-all", s.authenticated(s.handleGrantStarsAll))
 	mux.HandleFunc("POST /v1/accounts/debit-stars", s.authenticated(s.handleDebitStars))
 	mux.HandleFunc("POST /v1/accounts/resolve-by-phone", s.authenticated(s.handleResolveUserByPhone))
+	mux.HandleFunc("POST /v1/accounts/resolve-by-username", s.authenticated(s.handleResolveUserByUsername))
 	mux.HandleFunc("POST /v1/accounts/set-verified", s.authenticated(s.handleSetVerified))
 	mux.HandleFunc("POST /v1/accounts/set-flags", s.authenticated(s.handleSetUserFlags))
 	mux.HandleFunc("POST /v1/accounts/set-support", s.authenticated(s.handleSetSupport))
@@ -640,6 +641,35 @@ func (s *Server) handleResolveUserByPhone(w http.ResponseWriter, r *http.Request
 		return
 	}
 	user, found, err := svc.ResolveUserByPhone(r.Context(), req.Phone)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"found": found, "user_id": user.ID})
+}
+
+type userByUsernameResolver interface {
+	ResolveUserByUsername(context.Context, string) (domain.User, bool, error)
+}
+
+func (s *Server) handleResolveUserByUsername(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	username := strings.TrimPrefix(strings.TrimSpace(req.Username), "@")
+	if !domain.ValidResolvableUsername(username) {
+		writeError(w, http.StatusBadRequest, "invalid DeltaGram username")
+		return
+	}
+	svc, ok := s.svc.(userByUsernameResolver)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, "user lookup is not configured")
+		return
+	}
+	user, found, err := svc.ResolveUserByUsername(r.Context(), username)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

@@ -35,6 +35,21 @@ type ImportOptions struct {
 	CommandID string
 	// Now overrides the clock (tests only); defaults to time.Now.
 	Now func() time.Time
+
+	// Pack-level release schedule. A per-gift purchase_window in pack.json takes
+	// precedence over these fields. LockedUntilDate is a one-time unlock in Unix
+	// seconds; PurchaseWindow* is a recurring daily window evaluated in
+	// PurchaseWindowTimezone (Europe/Kyiv by default).
+	LockedUntilDate               int
+	PurchaseWindowEnabled         bool
+	PurchaseWindowStartMinute     int
+	PurchaseWindowDurationMinutes int
+	PurchaseWindowTimezone        string
+
+	// Pack-level defaults for gifts that do not declare their own supply or
+	// per-user cap in pack.json. A per-gift value always wins.
+	AvailabilityTotal int
+	PerUserTotal      int
 }
 
 // GiftImportOutcome reports what happened to one gift in the pack.
@@ -61,6 +76,9 @@ func Import(ctx context.Context, svc Service, manifest Manifest, assets AssetRes
 		now = opts.Now
 	}
 	at := int(now().Unix())
+	if err := validatePackSchedule(opts, at); err != nil {
+		return ImportResult{}, err
+	}
 	existing, err := svc.CatalogAll(ctx)
 	if err != nil {
 		return ImportResult{}, fmt.Errorf("read existing catalog: %w", err)
@@ -85,6 +103,8 @@ func Import(ctx context.Context, svc Service, manifest Manifest, assets AssetRes
 			return ImportResult{}, fmt.Errorf("gift %q: %w", spec.Title, err)
 		}
 		applyPurchaseWindow(&bundle.Catalog, spec.PurchaseWindow, at)
+		applyPackSchedule(&bundle.Catalog, spec.PurchaseWindow, opts, at)
+		applyPackLimits(&bundle.Catalog, opts)
 		if bundle.Catalog.Animation.Width != 512 || bundle.Catalog.Animation.Height != 512 ||
 			len(bundle.Catalog.Animation.TGS) == 0 || len(bundle.Catalog.Animation.SHA256) != 32 {
 			return ImportResult{}, fmt.Errorf("gift %q: invalid base animation", spec.Title)
@@ -152,27 +172,106 @@ func applyPurchaseWindow(write *domain.StarGiftCatalogWrite, window *PurchaseWin
 	if err != nil {
 		return
 	}
-	location, err := time.LoadLocation(window.NormalizedTimezone())
-	if err != nil {
+	if _, err := time.LoadLocation(window.NormalizedTimezone()); err != nil {
 		return
 	}
 	write.PurchaseWindowEnabled = true
 	write.PurchaseWindowStartMinute = startMinute
 	write.PurchaseWindowDurationMinutes = window.DurationMinutes
 	write.PurchaseWindowTimezone = window.NormalizedTimezone()
+	seedPurchaseWindowLock(write, now)
+}
 
-	nowTime := time.Unix(int64(now), 0).In(location)
-	minute := nowTime.Hour()*60 + nowTime.Minute()
-	offset := (minute - startMinute + 1440) % 1440
-	if offset < window.DurationMinutes {
+// applyPackSchedule applies the admin-supplied schedule to gifts that did not
+// carry their own purchase_window in pack.json. A per-gift window always wins.
+func applyPackSchedule(write *domain.StarGiftCatalogWrite, perGift *PurchaseWindowSpec, opts ImportOptions, now int) {
+	if write.Auction || perGift != nil {
 		return
 	}
-	startHour, startOfHourMinute := startMinute/60, startMinute%60
-	next := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), startHour, startOfHourMinute, 0, 0, location)
+	if opts.PurchaseWindowEnabled {
+		timezone := strings.TrimSpace(opts.PurchaseWindowTimezone)
+		if timezone == "" {
+			timezone = "Europe/Kyiv"
+		}
+		write.PurchaseWindowEnabled = true
+		write.PurchaseWindowStartMinute = opts.PurchaseWindowStartMinute
+		write.PurchaseWindowDurationMinutes = opts.PurchaseWindowDurationMinutes
+		write.PurchaseWindowTimezone = timezone
+		seedPurchaseWindowLock(write, now)
+		return
+	}
+	if opts.LockedUntilDate > now {
+		write.LockedUntilDate = opts.LockedUntilDate
+	}
+}
+
+// seedPurchaseWindowLock records the next opening as a one-shot locked_until_date.
+// Clients that only know locked_until_date then draw a lock and a local release
+// time even though the server enforces the recurring window on every day.
+func seedPurchaseWindowLock(write *domain.StarGiftCatalogWrite, now int) {
+	location, err := time.LoadLocation(write.PurchaseWindowTimezone)
+	if err != nil || write.PurchaseWindowDurationMinutes >= 1440 {
+		return
+	}
+	nowTime := time.Unix(int64(now), 0).In(location)
+	minute := nowTime.Hour()*60 + nowTime.Minute()
+	offset := (minute - write.PurchaseWindowStartMinute + 1440) % 1440
+	if offset < write.PurchaseWindowDurationMinutes {
+		return
+	}
+	startHour, startMinute := write.PurchaseWindowStartMinute/60, write.PurchaseWindowStartMinute%60
+	next := time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day(), startHour, startMinute, 0, 0, location)
 	if !next.After(nowTime) {
-		next = time.Date(nowTime.Year(), nowTime.Month(), nowTime.Day()+1, startHour, startOfHourMinute, 0, 0, location)
+		next = next.AddDate(0, 0, 1)
 	}
 	write.LockedUntilDate = int(next.Unix())
+}
+
+// applyPackLimits applies the admin form's pack-wide supply and per-user caps
+// only when the gift itself did not declare them in pack.json.
+func applyPackLimits(write *domain.StarGiftCatalogWrite, opts ImportOptions) {
+	if write.Auction {
+		return
+	}
+	if opts.AvailabilityTotal > 0 && !write.Limited {
+		write.Limited = true
+		write.AvailabilityTotal = opts.AvailabilityTotal
+	}
+	if opts.PerUserTotal > 0 && !write.LimitedPerUser {
+		write.LimitedPerUser = true
+		write.PerUserTotal = opts.PerUserTotal
+	}
+}
+
+func validatePackSchedule(opts ImportOptions, now int) error {
+	if opts.AvailabilityTotal < 0 || opts.PerUserTotal < 0 {
+		return fmt.Errorf("pack limits must not be negative")
+	}
+	if opts.LockedUntilDate != 0 {
+		if opts.LockedUntilDate <= now {
+			return fmt.Errorf("pack schedule: release time must be in the future")
+		}
+		if opts.PurchaseWindowEnabled {
+			return fmt.Errorf("pack schedule: choose either a one-time release or a recurring window")
+		}
+	}
+	if !opts.PurchaseWindowEnabled {
+		return nil
+	}
+	if opts.PurchaseWindowStartMinute < 0 || opts.PurchaseWindowStartMinute > 1439 {
+		return fmt.Errorf("pack schedule: start minute must be within one day")
+	}
+	if opts.PurchaseWindowDurationMinutes < 1 || opts.PurchaseWindowDurationMinutes > 1440 {
+		return fmt.Errorf("pack schedule: duration must be 1..1440 minutes")
+	}
+	timezone := strings.TrimSpace(opts.PurchaseWindowTimezone)
+	if timezone == "" {
+		timezone = "Europe/Kyiv"
+	}
+	if _, err := time.LoadLocation(timezone); err != nil {
+		return fmt.Errorf("pack schedule: timezone is invalid")
+	}
+	return nil
 }
 
 func buildBundle(prep Preparer, spec GiftSpec, assets AssetResolver) (domain.StarGiftCatalogBundleWrite, error) {

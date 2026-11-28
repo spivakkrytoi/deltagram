@@ -94,6 +94,9 @@ type uiConfig struct {
 	// entry, so introducing the permission model never locks an operator out of a
 	// panel that worked before.
 	Permissions []string
+	// Separate machine-to-machine credential for bounded self-service investor
+	// actions. The investor web process NEVER receives AdminAPIToken.
+	InvestorBridgeKey string
 	// IdentityDir mirrors config.IdentityDir -- must point at the same
 	// directory the telesrv server reads, so an identity edit here is visible
 	// to the running server immediately (see internal/identity). The name the
@@ -179,6 +182,7 @@ func loadConfig() (uiConfig, error) {
 		SessionKey:                 sum[:],
 		DiskStatsPath:              dashboardDiskPath(appCfg),
 		Permissions:                appCfg.AdminUIPermissions,
+		InvestorBridgeKey:          os.Getenv("INVESTOR_BRIDGE_KEY"),
 		IdentityDir:                appCfg.IdentityDir,
 		WelcomeMessagePhoneDefault: appCfg.WelcomeMessagePhoneTemplate,
 		WelcomeMessageEmailDefault: appCfg.WelcomeMessageEmailTemplate,

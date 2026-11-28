@@ -20,8 +20,10 @@ func TestValidAdminUsername(t *testing.T) {
 		{name: "Ёжик", want: true, reason: "uppercase Cyrillic first letter"},
 		{name: "тест_1", want: true, reason: "Cyrillic with underscore and digit"},
 		{name: strings.Repeat("я", MaxCollectibleUsernameLength), want: true, reason: "32 Cyrillic runes"},
-		{name: "ab", want: false, reason: "below the operator minimum"},
-		{name: "ёж", want: false, reason: "two Cyrillic runes are below the operator minimum"},
+		{name: "ab", want: true, reason: "two Latin letters are allowed for operators"},
+		{name: "ёж", want: true, reason: "two Cyrillic letters are allowed for operators"},
+		{name: "a", want: false, reason: "one character is below the operator minimum"},
+		{name: "я", want: false, reason: "one Cyrillic rune is below the operator minimum"},
 		{name: "1ab", want: false, reason: "must start with a letter"},
 		{name: "1тест", want: false, reason: "must start with a letter, Cyrillic included"},
 		{name: "_ab", want: false, reason: "must start with a letter"},
@@ -44,8 +46,8 @@ func TestValidAdminUsernameKeepsPublicCollectibleMinimum(t *testing.T) {
 	if ValidCollectibleUsername("abc") {
 		t.Fatal("public collectible minimum must stay at four characters")
 	}
-	if !ValidAdminUsername("abc") {
-		t.Fatal("operator path must accept a three-character name")
+	if !ValidAdminUsername("ab") {
+		t.Fatal("operator path must accept a two-character name")
 	}
 }
 
@@ -59,12 +61,12 @@ func TestPublicValidatorsRejectCyrillic(t *testing.T) {
 }
 
 func TestValidResolvableUsernameCoversAdminNames(t *testing.T) {
-	for _, name := range []string{"abc", "привет", "абв", "ёжик", "Ёжик"} {
+	for _, name := range []string{"ab", "ёж", "abc", "привет", "абв", "ёжик", "Ёжик"} {
 		if !ValidResolvableUsername(name) {
 			t.Errorf("ValidResolvableUsername(%q) = false, want true", name)
 		}
 	}
-	for _, name := range []string{"ab", "ёж", "1тест", "тест-1"} {
+	for _, name := range []string{"a", "я", "1тест", "тест-1"} {
 		if ValidResolvableUsername(name) {
 			t.Errorf("ValidResolvableUsername(%q) = true, want false", name)
 		}

@@ -281,6 +281,7 @@ export const api = {
 	setAccountAvatar: (form: FormData) => request<CommandResult>("/api/actions/set-account-avatar", { method: "POST", body: form }),
 	setChannelAvatar: (form: FormData) => request<CommandResult>("/api/actions/set-channel-avatar", { method: "POST", body: form }),
   adminUsers: () => request<AdminConsoleUserList>("/api/admin-users"),
+  investors: () => request<{ rows: { user_id: string; login: string; name: string; active: boolean }[] }>("/api/investors"),
   auditLogs: (params: URLSearchParams) => request<AuditLogListResponse>(`/api/audit-logs?${params.toString()}`),
   // Server Settings -- identity and login-notification template overrides are
   // saved through the generic action() below; the read side and status probes

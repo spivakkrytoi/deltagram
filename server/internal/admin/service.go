@@ -878,6 +878,21 @@ type ImportGiftPackRequest struct {
 	FileName   string `json:"file_name"`
 	ContentSHA string `json:"content_sha256"`
 	Data       []byte `json:"-"`
+
+	// Optional pack-wide release schedule. A per-gift purchase_window in
+	// pack.json takes precedence. LockedUntilDate is a one-time unlock in Unix
+	// seconds; PurchaseWindow* is a recurring daily window in the given IANA
+	// timezone (default Europe/Kyiv).
+	LockedUntilDate               int    `json:"locked_until_date,omitempty"`
+	PurchaseWindowEnabled         bool   `json:"purchase_window_enabled,omitempty"`
+	PurchaseWindowStartMinute     int    `json:"purchase_window_start_minute,omitempty"`
+	PurchaseWindowDurationMinutes int    `json:"purchase_window_duration_minutes,omitempty"`
+	PurchaseWindowTimezone        string `json:"purchase_window_timezone,omitempty"`
+
+	// Optional pack-wide defaults for gifts that do not declare their own
+	// supply or per-user cap in pack.json.
+	AvailabilityTotal int `json:"availability_total,omitempty"`
+	PerUserTotal      int `json:"per_user_total,omitempty"`
 }
 
 type ImportOfficialStarGiftRequest struct {
@@ -2255,7 +2270,7 @@ func (s *Service) GiveGift(ctx context.Context, req GiveGiftRequest) (CommandRes
 
 // AdminUsernameSetter is implemented by the users service to force-set a
 // username without the public 5-character minimum. The admin panel uses it so
-// operators can assign three-character names.
+// operators can assign two-character names.
 type AdminUsernameSetter interface {
 	AdminUpdateUsername(ctx context.Context, userID int64, username string) (domain.User, error)
 }
@@ -2388,6 +2403,15 @@ func (s *Service) SetPhone(ctx context.Context, req SetPhoneRequest) (CommandRes
 		}
 		return CommandResult{Message: "phone updated", Details: details}, nil
 	})
+}
+
+// ResolveUserByUsername reads the authoritative DeltaGram username registry,
+// including active collectible usernames, without relying on Telegram bot data.
+func (s *Service) ResolveUserByUsername(ctx context.Context, username string) (domain.User, bool, error) {
+	if s == nil || s.userLookup == nil {
+		return domain.User{}, false, fmt.Errorf("admin user lookup is not configured")
+	}
+	return s.userLookup.ByUsername(ctx, username)
 }
 
 func (s *Service) ResolveUserByPhone(ctx context.Context, phone string) (domain.User, bool, error) {
@@ -4114,6 +4138,9 @@ func (s *Service) ImportGiftPack(ctx context.Context, req ImportGiftPackRequest)
 	if s == nil || s.gifts == nil {
 		return CommandResult{}, fmt.Errorf("star gift service is not configured")
 	}
+	if err := validateGiftPackSchedule(req, s.now()); err != nil {
+		return CommandResult{}, err
+	}
 	archive, err := giftpack.NewZipAssetResolver(req.Data)
 	if err != nil {
 		return CommandResult{}, err
@@ -4131,6 +4158,13 @@ func (s *Service) ImportGiftPack(ctx context.Context, req ImportGiftPackRequest)
 	return s.runCommand(ctx, req.CommandMeta, ActionImportGiftPack, 0, domain.Peer{}, req, func() (CommandResult, error) {
 		outcome, err := giftpack.Import(ctx, s.gifts, manifest, archive, giftpack.ImportOptions{
 			DryRun: req.DryRun, Actor: req.Actor, CommandID: req.CommandID, Now: s.now,
+			LockedUntilDate:               req.LockedUntilDate,
+			PurchaseWindowEnabled:         req.PurchaseWindowEnabled,
+			PurchaseWindowStartMinute:     req.PurchaseWindowStartMinute,
+			PurchaseWindowDurationMinutes: req.PurchaseWindowDurationMinutes,
+			PurchaseWindowTimezone:        req.PurchaseWindowTimezone,
+			AvailabilityTotal:             req.AvailabilityTotal,
+			PerUserTotal:                  req.PerUserTotal,
 		})
 		result := CommandResult{Details: map[string]any{"pack_name": manifest.PackName, "content_sha256": req.ContentSHA, "gifts": outcome.Gifts}}
 		if err != nil {
@@ -4144,6 +4178,39 @@ func (s *Service) ImportGiftPack(ctx context.Context, req ImportGiftPackRequest)
 		}
 		return result, nil
 	})
+}
+
+// validateGiftPackSchedule mirrors giftpack's validation before a command is
+// recorded, so an invalid schedule is rejected without a dry-run round trip.
+func validateGiftPackSchedule(req ImportGiftPackRequest, now time.Time) error {
+	if req.AvailabilityTotal < 0 || req.PerUserTotal < 0 {
+		return fmt.Errorf("%w: pack limits must not be negative", domain.ErrStarGiftLifecycleInvalid)
+	}
+	if req.LockedUntilDate != 0 {
+		if req.LockedUntilDate <= int(now.Unix()) {
+			return fmt.Errorf("%w: release time must be in the future", domain.ErrStarGiftLifecycleInvalid)
+		}
+		if req.PurchaseWindowEnabled {
+			return fmt.Errorf("%w: choose either a one-time release or a recurring window", domain.ErrStarGiftLifecycleInvalid)
+		}
+	}
+	if !req.PurchaseWindowEnabled {
+		return nil
+	}
+	if req.PurchaseWindowStartMinute < 0 || req.PurchaseWindowStartMinute > 1439 {
+		return fmt.Errorf("%w: start minute must be within one day", domain.ErrStarGiftLifecycleInvalid)
+	}
+	if req.PurchaseWindowDurationMinutes < 1 || req.PurchaseWindowDurationMinutes > 1440 {
+		return fmt.Errorf("%w: duration must be 1..1440 minutes", domain.ErrStarGiftLifecycleInvalid)
+	}
+	timezone := strings.TrimSpace(req.PurchaseWindowTimezone)
+	if timezone == "" {
+		timezone = "Europe/Kyiv"
+	}
+	if _, err := time.LoadLocation(timezone); err != nil {
+		return fmt.Errorf("%w: timezone is invalid", domain.ErrStarGiftLifecycleInvalid)
+	}
+	return nil
 }
 
 func (s *Service) OfficialStarGifts(ctx context.Context) ([]officialgifts.GiftSummary, error) {

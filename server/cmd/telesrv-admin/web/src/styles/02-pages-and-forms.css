@@ -927,3 +927,12 @@ textarea:focus {
 .progress-wide .progress-cell {
   min-width: 0;
 }
+.investor-admin{margin-top:42px;border-top:1px solid var(--border,#ffffff26);padding-top:28px}
+.investor-admin>.muted{max-width:760px;line-height:1.65;margin:12px 0 22px}
+.investor-admin>.btn{margin-top:14px}
+.investor-access-form{margin-top:24px;padding:24px;border:1px solid var(--border,#ffffff26);border-radius:18px;background:rgba(255,255,255,.025)}
+.investor-access-form h3{margin:0 0 20px}
+.investor-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.investor-access-form .toolbar{margin-top:18px}
+.investor-access-form>.muted{margin:16px 0 0;font-size:12px}
+@media(max-width:800px){.investor-fields{grid-template-columns:1fr}.investor-access-form{padding:18px}}

@@ -1483,6 +1483,7 @@ func run(logger *zap.Logger) error {
 		auth.WithCodeTTL(cfg.AuthCodeTTL),
 		auth.WithCodeMaxAttempts(cfg.AuthCodeMaxAttempts),
 		auth.WithPhoneCodeDelivery(phoneCodeSender, cfg.PhoneCodeLength),
+		auth.WithPhoneCodeDeliveryAppType(cfg.PhoneCodeDeliveryProvider == "webhook"),
 		auth.WithOTPDeliveryFailureObserver(func(_ context.Context, request otpdelivery.Request, err error) {
 			logger.Named("otp").Warn("附加 OTP provider 投递失败，777000 App-code 保持有效",
 				zap.String("delivery_id", request.DeliveryID),
@@ -1664,6 +1665,7 @@ func run(logger *zap.Logger) error {
 		Stars:                      starsService,
 		Premium:                    premiumService,
 		Gifts:                      giftsService,
+		Wallet:                     postgres.NewWalletStore(pool),
 		Passkey:                    passkeyService,
 		Themes:                     themeService,
 		GroupCalls:                 groupCallsService,

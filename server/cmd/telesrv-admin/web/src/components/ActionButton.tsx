@@ -78,11 +78,14 @@ export function ActionButton({
   const triggerClass = `btn ${tone === "danger" ? "danger" : tone === "warn" ? "warn" : tone === "primary" ? "primary" : ""} ${compact ? "compact-btn" : ""}`;
   const previewPayload = useMemo(() => {
     try {
-      return payload();
+      const preview = payload();
+      return secretField && secretField in preview
+        ? { ...preview, [secretField]: preview[secretField] ? "••••••••" : "" }
+        : preview;
     } catch (err) {
       return { payload_error: errorMessage(err) };
     }
-  }, [open, payload]);
+  }, [open, payload, secretField]);
   const secretValue = secretField && result?.details && typeof result.details[secretField] === "string"
     ? result.details[secretField] as string
     : "";

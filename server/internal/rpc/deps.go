@@ -1175,6 +1175,7 @@ type Deps struct {
 	SecretChats                SecretChatService
 	Stars                      StarsService
 	Gifts                      GiftsService
+	Wallet                     WalletService
 	Passkey                    PasskeyService
 	Themes                     ThemeService
 }
@@ -1257,6 +1258,12 @@ type GiftsService interface {
 	IssuePurchaseForm(ctx context.Context, form domain.StarGiftPurchaseForm) (domain.StarGiftPurchaseForm, error)
 	ValidatePurchaseForm(ctx context.Context, req domain.StarGiftPurchaseRequest) error
 	Purchase(ctx context.Context, req domain.StarGiftPurchaseRequest) (domain.StarGiftPurchaseResult, error)
+}
+
+// WalletService exposes the Deltament GRAM card to the DeltaGram client.
+// Card returns the payout address and the balance in nanotons (1 GRAM = 1 TON).
+type WalletService interface {
+	Card(ctx context.Context, userID int64) (address string, balanceNanoton int64, err error)
 }
 
 // StarsService 抽象 Stars 本地账本（app/stars）：余额查询、贷记/借记、流水分页。

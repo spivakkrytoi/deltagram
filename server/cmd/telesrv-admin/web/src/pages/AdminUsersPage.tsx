@@ -8,6 +8,7 @@ import { useI18n } from "../i18n";
 import { groupPermissions, permissionHint, permissionTitle } from "../permissions";
 import { formatDate } from "../lib/format";
 import type { AdminConsoleUser, AdminConsoleSystemOperator } from "../types";
+import { InvestorAccess } from "./InvestorAccess";
 
 // The operator-accounts screen. The table only reports; every change happens in
 // a modal and goes through the panel's usual reason + dry-run + confirm flow,
@@ -120,6 +121,7 @@ export function AdminUsersPage() {
           </tbody>
         </table>
       </div>
+      <InvestorAccess />
 
       {creating && (
         <OperatorModal

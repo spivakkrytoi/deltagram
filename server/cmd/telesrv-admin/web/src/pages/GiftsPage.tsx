@@ -7,7 +7,7 @@ import { ActionButton } from "../components/ActionButton";
 import { SectionTabs, giftTabs } from "../components/SectionTabs";
 import { Alert, Badge, EmptyRow, Metric, PageFrame, QueryPanel } from "../components/ui";
 import { useI18n } from "../i18n";
-import { formatDate, localInputValue, titleFromFilename, toUnixSeconds } from "../lib/format";
+import { formatDate, kyivLocalInputValue, kyivToUnix, titleFromFilename } from "../lib/format";
 import type { Navigate } from "../routing";
 import type { CommandResult, OfficialStarGiftRow, StarGiftRow } from "../types";
 import { GiftCollectiblesModal } from "./GiftCollectiblesModal";
@@ -117,11 +117,11 @@ export function GiftsPage({ navigate }: { navigate: Navigate }) {
   const [giftsPerRound, setGiftsPerRound] = useState("1");
   const [roundDuration, setRoundDuration] = useState("3600");
   const [auctionStartAt, setAuctionStartAt] = useState("");
-  const [unlockAt, setUnlockAt] = useState("");
+  const [unlockAt, setUnlockAt] = useState(() => kyivLocalInputValue(3600));
   // The snapshot path carries its own scheduling state: the mode selector above
   // belongs to the upload form, and an official gift cannot be auctioned here.
   const [officialScheduled, setOfficialScheduled] = useState(false);
-  const [officialUnlockAt, setOfficialUnlockAt] = useState(() => localInputValue(3600));
+  const [officialUnlockAt, setOfficialUnlockAt] = useState(() => kyivLocalInputValue(3600));
   const [enabled, setEnabled] = useState(true);
   const [supportOnly, setSupportOnly] = useState(false);
   const [premium, setPremium] = useState(false);
@@ -195,7 +195,7 @@ export function GiftsPage({ navigate }: { navigate: Navigate }) {
       const supply = Number(auctionSupply);
       const perRound = Number(giftsPerRound);
       const duration = Number(roundDuration);
-      const startDate = toUnixSeconds(auctionStartAt);
+      const startDate = kyivToUnix(auctionStartAt);
       if (!auctionSlug.trim()) throw new Error(t("gifts.lifecycle.slugRequired"));
       if (!(supply > 0)) throw new Error(t("gifts.lifecycle.supplyRequired"));
       if (!(perRound > 0)) throw new Error(t("gifts.lifecycle.perRoundRequired"));
@@ -212,7 +212,7 @@ export function GiftsPage({ navigate }: { navigate: Navigate }) {
       };
     }
     if (lifecycleMode === "drop") {
-      const unlock = toUnixSeconds(unlockAt);
+      const unlock = kyivToUnix(unlockAt);
       if (unlock <= now) throw new Error(t("gifts.lifecycle.unlockRequired"));
       return { locked_until_date: unlock };
     }
@@ -253,7 +253,7 @@ export function GiftsPage({ navigate }: { navigate: Navigate }) {
     // release time the snapshot itself carries.
     let lockedUntil = 0;
     if (officialScheduled) {
-      lockedUntil = toUnixSeconds(officialUnlockAt);
+      lockedUntil = kyivToUnix(officialUnlockAt);
       if (lockedUntil <= Math.floor(Date.now() / 1000)) throw new Error(t("gifts.lifecycle.unlockRequired"));
     }
 return {
@@ -310,6 +310,7 @@ return {
 
   function startImport() {
 	setGiftID("0"); setTitle(""); setStars("50"); setConvertStars("50"); setSortOrder("0");
+	setUnlockAt(kyivLocalInputValue(3600)); setOfficialUnlockAt(kyivLocalInputValue(3600));
     setEnabled(true); setSupportOnly(false); setPremium(false); setBirthday(false); setLimit("0"); setReleasedBy(""); setPerUserLimit("0"); setReason(""); setFile(null); setPreview(null); setImportError("");
     setImportSource("official"); setSourceGiftID(""); setOfficialQuery(""); setOfficialCategory("all"); setImportOpen(true);
   }
@@ -473,11 +474,15 @@ return {
                     <label><span>{t("gifts.auction.roundDuration")}</span><input type="number" min="1" value={roundDuration} onChange={(e) => { setRoundDuration(e.target.value); setPreview(null); }} /></label>
                     <label><span>{t("gifts.auction.startAt")}</span><input type="datetime-local" value={auctionStartAt} onChange={(e) => { setAuctionStartAt(e.target.value); setPreview(null); }} /></label>
                   </div>
+                  <div className="gift-import-note"><span>{t("gifts.drop.timezoneHint")}</span></div>
                   {auctionRounds > 0 && <div className="gift-import-note"><span>{t("gifts.auction.plan", { rounds: auctionRounds, perRound: Number(giftsPerRound), minutes: Math.max(1, Math.round(Number(roundDuration) / 60)) })}</span></div>}
                 </>}
-                {lifecycleMode === "drop" && <div className="gift-fields-grid">
-                  <label><span>{t("gifts.drop.unlockAt")}</span><input type="datetime-local" value={unlockAt} onChange={(e) => { setUnlockAt(e.target.value); setPreview(null); }} /></label>
-                </div>}
+                {lifecycleMode === "drop" && <>
+                  <div className="gift-fields-grid">
+                    <label><span>{t("gifts.drop.unlockAt")}</span><input type="datetime-local" value={unlockAt} onChange={(e) => { setUnlockAt(e.target.value); setPreview(null); }} /></label>
+                  </div>
+                  <div className="gift-import-note"><span>{t("gifts.drop.timezoneHint")}</span></div>
+                </>}
               </section> : <section className="gift-lifecycle">
                 <span className="gift-field-label">{t("gifts.lifecycle.label")}</span>
                 <div className="gift-import-note"><span>{t("gifts.lifecycle.auctionFileOnly")}</span></div>
@@ -487,6 +492,7 @@ return {
                   <div className="gift-fields-grid">
                     <label><span>{t("gifts.drop.unlockAt")}</span><input type="datetime-local" value={officialUnlockAt} onChange={(e) => { setOfficialUnlockAt(e.target.value); setPreview(null); }} /></label>
                   </div>
+                  <div className="gift-import-note"><span>{t("gifts.drop.timezoneHint")}</span></div>
                 </>}
               </section>}
               <label className="gift-reason-field"><span>{t("gifts.reason")}</span><input value={reason} placeholder={t("gifts.reasonPlaceholder")} onChange={(e) => setReason(e.target.value)} /></label>

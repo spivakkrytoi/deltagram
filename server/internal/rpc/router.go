@@ -337,6 +337,7 @@ func New(cfg Config, deps Deps, log *zap.Logger, clk clock.Clock) *Router {
 	r.registerPhone(d)
 	r.registerEncrypted(d)
 	r.registerPayments(d)
+	r.registerWallet(d)
 	r.registerStats(d)
 	r.registerPremium(d)
 	r.registerAiCompose(d)

@@ -394,7 +394,7 @@ func (s *Service) UpdateUsername(ctx context.Context, userID int64, username str
 // AdminUpdateUsername force-sets the editable username from an operator-only
 // surface (the telesrv-admin panel). It keeps the public character rules but
 // accepts names below the five-character minimum, down to
-// domain.MinAdminUsernameLength, so operators can assign three-character names.
+// domain.MinAdminUsernameLength, so operators can assign two-character names.
 func (s *Service) AdminUpdateUsername(ctx context.Context, userID int64, username string) (domain.User, error) {
 	return s.updateUsername(ctx, userID, username, domain.ValidAdminUsername)
 }
@@ -826,11 +826,9 @@ func (s *Service) ResolveUsername(ctx context.Context, currentUserID int64, user
 	}
 	username = normalizeUsername(username)
 	_, reservedSystemUsername := domain.SystemUserByUsername(username)
-	// Resolution covers both the editable username slot (5..32) and
-	// Fragment-style collectible usernames (4..32). Keep the stricter
-	// validUsername check on create/update paths; only lookup accepts the
-	// collectible lower bound.
-	if !reservedSystemUsername && !domain.ValidCollectibleUsername(username) {
+	// Resolution also accepts operator-issued usernames shorter than public
+	// names; public create/update paths retain their stricter validators.
+	if !reservedSystemUsername && !domain.ValidResolvableUsername(username) {
 		return domain.User{}, false, domain.ErrUsernameInvalid
 	}
 	u, found, err := s.users.ByUsername(ctx, username)

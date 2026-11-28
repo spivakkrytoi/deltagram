@@ -5,7 +5,7 @@ import { api, errorMessage } from "../api";
 import { SectionTabs, giftTabs } from "../components/SectionTabs";
 import { Alert, Badge, EmptyRow, Metric, PageFrame } from "../components/ui";
 import { useI18n, type TFunction } from "../i18n";
-import { formatUnix, localInputValue, titleFromFilename, toUnixSeconds } from "../lib/format";
+import { formatUnix, kyivLocalInputValue, kyivToUnix, titleFromFilename } from "../lib/format";
 import type { Navigate } from "../routing";
 import type { CommandResult, StarGiftAuctionRow } from "../types";
 import { LottiePreview } from "./GiftsPage";
@@ -215,8 +215,8 @@ function AuthorModal({ mode, onClose, onCreated }: { mode: AuthorMode; onClose: 
   const [supply, setSupply] = useState("10");
   const [perRound, setPerRound] = useState("2");
   const [roundDuration, setRoundDuration] = useState("3600");
-  const [startAt, setStartAt] = useState(() => localInputValue(600));
-  const [unlockAt, setUnlockAt] = useState(() => localInputValue(3600));
+  const [startAt, setStartAt] = useState(() => kyivLocalInputValue(600));
+  const [unlockAt, setUnlockAt] = useState(() => kyivLocalInputValue(3600));
   const [reason, setReason] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [supportOnly, setSupportOnly] = useState(false);
@@ -240,7 +240,7 @@ function AuthorModal({ mode, onClose, onCreated }: { mode: AuthorMode; onClose: 
     const nowSec = Math.floor(Date.now() / 1000);
     if (mode === "auction") {
       const total = Number(supply); const per = Number(perRound); const duration = Number(roundDuration);
-      const start = toUnixSeconds(startAt);
+      const start = kyivToUnix(startAt);
       if (!slug.trim()) throw new Error(t("gifts.lifecycle.slugRequired"));
       if (!(total > 0)) throw new Error(t("gifts.lifecycle.supplyRequired"));
       if (!(per > 0)) throw new Error(t("gifts.lifecycle.perRoundRequired"));
@@ -256,7 +256,7 @@ function AuthorModal({ mode, onClose, onCreated }: { mode: AuthorMode; onClose: 
         auction_start_date: start
       };
     }
-    const unlock = toUnixSeconds(unlockAt);
+    const unlock = kyivToUnix(unlockAt);
     if (unlock <= nowSec) throw new Error(t("gifts.lifecycle.unlockRequired"));
     return { locked_until_date: unlock };
   }
@@ -336,10 +336,14 @@ function AuthorModal({ mode, onClose, onCreated }: { mode: AuthorMode; onClose: 
               <label><span>{t("gifts.auction.roundDuration")}</span><input type="number" min="1" value={roundDuration} onChange={(e) => edit(setRoundDuration)(e.target.value)} /></label>
               <label><span>{t("gifts.auction.startAt")}</span><input type="datetime-local" value={startAt} onChange={(e) => edit(setStartAt)(e.target.value)} /></label>
             </div>
+            <div className="gift-import-note"><span>{t("gifts.drop.timezoneHint")}</span></div>
             {rounds > 0 && <div className="gift-import-note"><span>{t("gifts.auction.plan", { rounds, perRound: Number(perRound), minutes: Math.max(1, Math.round(Number(roundDuration) / 60)) })}</span></div>}
-          </> : <div className="gift-fields-grid">
-            <label><span>{t("gifts.drop.unlockAt")}</span><input type="datetime-local" value={unlockAt} onChange={(e) => edit(setUnlockAt)(e.target.value)} /></label>
-          </div>}
+          </> : <>
+            <div className="gift-fields-grid">
+              <label><span>{t("gifts.drop.unlockAt")}</span><input type="datetime-local" value={unlockAt} onChange={(e) => edit(setUnlockAt)(e.target.value)} /></label>
+            </div>
+            <div className="gift-import-note"><span>{t("gifts.drop.timezoneHint")}</span></div>
+          </>}
           <label className="gift-reason-field"><span>{t("gifts.reason")}</span><input value={reason} placeholder={t("gifts.reasonPlaceholder")} onChange={(e) => setReason(e.target.value)} /></label>
           <label className="gift-switch">
             <input type="checkbox" checked={enabled} onChange={(e) => edit(setEnabled)(e.target.checked)} />

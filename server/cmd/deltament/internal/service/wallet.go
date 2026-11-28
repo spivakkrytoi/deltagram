@@ -263,13 +263,13 @@ func (w *Wallet) WithdrawTON(ctx context.Context, u domain.User, amount domain.C
 	// Cents are 1/100 GRAM, so one cent is 1e7 nanotons.
 	nanoton := int64(amount) * (domain.NanotonPerTON / 100)
 	whole := float64(nanoton) / float64(domain.NanotonPerTON)
-	title := fmt.Sprintf("Вывод в TON · %s TON", trimTON(whole))
+	title := fmt.Sprintf("Вывод в GRAM · %s GRAM", trimTON(whole))
 	if err := w.db.InTx(ctx, func(tx store.Tx) error {
 		return tx.Debit(ctx, u.ID, amount, domain.HistoryWithdraw, title)
 	}); err != nil {
 		return 0, err
 	}
-	if err := w.db.CreditTON(ctx, u.ServerUserID, nanoton, "withdraw", "Начисление на TON-карту"); err != nil {
+	if err := w.db.CreditTON(ctx, u.ServerUserID, nanoton, "withdraw", "Начисление на GRAM-карту"); err != nil {
 		if rerr := w.db.Credit(ctx, u.ID, amount, domain.HistoryRefund, "Возврат вывода"); rerr != nil {
 			w.log.Error("ton withdraw refund failed", "user", u.ID, "amount", amount, "err", rerr)
 		}
@@ -299,7 +299,7 @@ func (w *Wallet) GrantTON(ctx context.Context, mainUserID int64, amountNanoton i
 	if amountNanoton > 1_000_000*domain.NanotonPerTON {
 		return domain.TONCard{}, fmt.Errorf("%w: amount is too large", domain.ErrInvalid)
 	}
-	title := "Начисление TON от администратора"
+	title := "Начисление GRAM от администратора"
 	if actor != "" {
 		title += " · " + actor
 	}

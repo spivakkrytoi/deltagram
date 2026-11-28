@@ -149,3 +149,72 @@ func TestImportPreflightsEntirePackBeforeWrite(t *testing.T) {
 		t.Fatalf("preflight: %v, writes=%d", err, len(svc.writes))
 	}
 }
+
+func TestImportAppliesPackScheduleAndPerGiftWindowWins(t *testing.T) {
+	now := time.Date(2026, 11, 27, 10, 0, 0, 0, time.UTC) // 12:00 Europe/Kyiv
+	clock := func() time.Time { return now }
+
+	oneShot := int(now.Add(2 * time.Hour).Unix())
+	svc := &testService{}
+	if _, err := Import(context.Background(), svc, testManifest(t), testAssets(), ImportOptions{
+		Now:             clock,
+		Actor:           "operator",
+		CommandID:       "pack-command",
+		LockedUntilDate: oneShot,
+	}); err != nil {
+		t.Fatalf("one-shot import: %v", err)
+	}
+	if got := svc.writes[0].Catalog.LockedUntilDate; got != oneShot {
+		t.Fatalf("locked_until_date = %d, want %d", got, oneShot)
+	}
+	if svc.writes[0].Catalog.PurchaseWindowEnabled {
+		t.Fatal("one-shot release must not enable a recurring window")
+	}
+
+	// A per-gift purchase_window in pack.json wins over the pack-level schedule.
+	perGift := testManifest(t)
+	perGift.Gifts[0].PurchaseWindow = &PurchaseWindowSpec{Start: "21:40", DurationMinutes: 60, Timezone: "Europe/Kyiv"}
+	svc = &testService{}
+	if _, err := Import(context.Background(), svc, perGift, testAssets(), ImportOptions{
+		Now:             clock,
+		Actor:           "operator",
+		CommandID:       "pack-command",
+		LockedUntilDate: oneShot,
+	}); err != nil {
+		t.Fatalf("per-gift import: %v", err)
+	}
+	if !svc.writes[0].Catalog.PurchaseWindowEnabled {
+		t.Fatal("per-gift window was not applied")
+	}
+	nextOpening := time.Date(2026, 11, 27, 19, 40, 0, 0, time.UTC).Unix() // 21:40 Kyiv (EET, UTC+2)
+	if got := svc.writes[0].Catalog.LockedUntilDate; got != int(nextOpening) {
+		t.Fatalf("per-gift locked_until_date = %d, want %d", got, nextOpening)
+	}
+
+	// A pack-level daily window seeds the next Kyiv opening for clients that only
+	// understand the one-shot lock.
+	svc = &testService{}
+	if _, err := Import(context.Background(), svc, testManifest(t), testAssets(), ImportOptions{
+		Now:                           clock,
+		Actor:                         "operator",
+		CommandID:                     "pack-command",
+		PurchaseWindowEnabled:         true,
+		PurchaseWindowStartMinute:     21*60 + 40,
+		PurchaseWindowDurationMinutes: 60,
+		PurchaseWindowTimezone:        "Europe/Kyiv",
+	}); err != nil {
+		t.Fatalf("daily import: %v", err)
+	}
+	if got := svc.writes[0].Catalog.LockedUntilDate; got != int(nextOpening) {
+		t.Fatalf("daily window locked_until_date = %d, want %d", got, nextOpening)
+	}
+
+	if _, err := Import(context.Background(), &testService{}, testManifest(t), testAssets(), ImportOptions{
+		Now:             clock,
+		Actor:           "operator",
+		CommandID:       "pack-command",
+		LockedUntilDate: int(now.Unix()) - 1,
+	}); err == nil {
+		t.Fatal("past one-shot schedule accepted")
+	}
+}

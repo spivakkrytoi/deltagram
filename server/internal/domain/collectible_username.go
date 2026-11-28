@@ -26,8 +26,8 @@ const (
 	// MinAdminUsernameLength is the operator-only lower bound used by the
 	// telesrv-admin panel when it issues an editable or collectible username.
 	// Public surfaces keep their own minimums (5 for the editable slot, 4 for
-	// collectible mints); the panel may assign three-character names.
-	MinAdminUsernameLength = 3
+	// collectible mints); the panel may assign two-character names.
+	MinAdminUsernameLength = 2
 	// MaxPeerCollectibleUsernames bounds the collectible rows a single peer can
 	// hold. The TL usernames vector is rendered in full by clients, so the bound
 	// keeps both the projection cost and the rendered list finite.
